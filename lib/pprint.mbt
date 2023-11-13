@@ -9,10 +9,10 @@ pub fn yield[T](x : T) -> Producer[T] {
   return { prod : prod }
 }
 
-pub fn then[T](self : Producer[T], f : ((T) -> Unit) -> Unit) -> Producer[T] {
+pub fn then[T](self : Producer[T], f : Producer[T]) -> Producer[T] {
   fn prod(consume : (T) -> Unit) {
     (self.prod)(consume)
-    f(consume)
+    (f.prod)(consume)
   }
   return { prod : prod }
 }
