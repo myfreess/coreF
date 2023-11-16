@@ -28,6 +28,10 @@ let recursive = true
 let nonRecursive = false
 
 pub fn bindersOf[L, R](l : List[(L, R)]) -> List[L] {
+  fn fst(pair) {
+    let (l, _) = pair
+    return l
+  }
   abort("")
 }
 

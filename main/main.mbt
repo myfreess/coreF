@@ -1,3 +1,6 @@
+
+
+
 fn init {
-  println("")
+  print(" ")
 }
