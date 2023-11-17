@@ -32,7 +32,15 @@ pub fn bindersOf[L, R](l : List[(L, R)]) -> List[L] {
     let (l, _) = pair
     return l
   }
-  abort("")
+  l.map(fst)
+}
+
+pub fn rhssOf[L, R](l : List[(L, R)]) -> List[R] {
+  fn snd(pair) {
+    let (_, r) = pair
+    return r
+  }
+  l.map(snd)
 }
 
 pub struct ScDef[T] {
