@@ -33,7 +33,15 @@ pub fn nest(base : Int, document : Doc) -> Doc {
 }
 
 fn blank(n : Int) -> String {
-  String::make(n, ' ')
+  // String::make(n, ' ')
+  fn go(i : Int) -> String {
+    if i == 0 {
+      return ""
+    } else {
+      " " + go(i - 1)
+    }
+  }
+  go(n)
 }
 
 pub fn Doc::concat(docs : Array[Doc]) -> Doc {
