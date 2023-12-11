@@ -1,6 +1,5 @@
 {
   "is_main": true,
   "import": {
-    "coreF/lib": ""
   }
 }
