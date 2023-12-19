@@ -7,19 +7,16 @@ program -> sc1 ...... scn
 
 sc -> (defn var[var1 ... varn] expr)
 
-expr -> (expr aexpr1 ... aexpr2) // 应用
-     |  ($let (defns) expr)
-     |  ($letrec (defns) expr)
+expr -> (expr expr1 ... exprn) // 应用
+     |  ($let (defs) expr)
+     |  ($letrec (defs) expr)
      |  ($case expr alts)
-     |  ($fn[var1 ... varn] expr)
-     |  aexpr
+     |  var
+     |  num
+     |  ($pack num num) // Constructor
 
-aexpr -> var
-      |  num
-      |  (Pack num num) // Constructor
-
-defns -> defn1 ... defnn
-defn -> [var expr]
+defs -> def1 ... defn
+def -> [var expr]
 
 alts -> alt1 ... altn
 alt -> [(num var1 ... varn) expr]
