@@ -1,6 +1,6 @@
 ## 什么是惰性求值
 
-## 一种惰性语言及其抽象语法树
+## 一种惰性求值语言及其抽象语法树
 
 constant applicative forms = 无参数sc
 

@@ -7,28 +7,28 @@ enum RawExpr[T] {
   Case(RawExpr[T], List[(Int, List[T], RawExpr[T])])
 }
 
-fn to_string[T : Show](self : RawExpr[T]) -> String {
-  match self {
-    Var(v) => "(Var \(v))"
-    Num(n) => "(Num \(n))"
-    Constructor(tag, arity) => "(Constructor \(tag) \(arity))"
-    Ap(f, x) => "(Apply \(f) \(x))"
-    Let(isRec, defs, exp) => {
-      if isRec {
-        let defs = defs.map(tuple2_str).to_string()
-        "(Letrec \(defs) \(exp))"
-      } else {
-        let defs = defs.map(tuple2_str).to_string()
-        "(Let \(defs) \(exp))"
-      }
-    }
-    Case(exp, alts) => {
-      let alts = alts.map(tuple3_str).to_string()
-      "(Case \(exp) \(alts))"
-    }
-  }
-}
-
+ fn to_string[T : Show](self : RawExpr[T]) -> String {
+   match self {
+     Var(v) => "(Var \(v))"
+     Num(n) => "(Num \(n))"
+     Constructor(tag, arity) => "(Constructor \(tag) \(arity))"
+     Ap(f, x) => "(Apply \(f) \(x))"
+     Let(isRec, defs, exp) => {
+       if isRec {
+         let defs = map(defs, tuple2_str).to_string()
+         "(Letrec \(defs) \(exp))"
+       } else {
+         let defs = map(defs, tuple2_str).to_string()
+         "(Let \(defs) \(exp))"
+       }
+     }
+     Case(exp, alts) => {
+       let alts = map(alts, tuple3_str).to_string()
+       "(Case \(exp) \(alts))"
+     }
+   }
+ }
+ 
 fn isAtom[T](self : RawExpr[T]) -> Bool {
   match self {
     Var(_) => true
@@ -46,7 +46,7 @@ fn bindersOf[L, R](l : List[(L, R)]) -> List[L] {
     let (l, _) = pair
     return l
   }
-  l.map(fst)
+  map(l, fst)
 }
 
 fn rhssOf[L, R](l : List[(L, R)]) -> List[R] {
@@ -54,7 +54,7 @@ fn rhssOf[L, R](l : List[(L, R)]) -> List[R] {
     let (_, r) = pair
     return r
   }
-  l.map(snd)
+  map(l, snd)
 }
 
 struct ScDef[T] {
@@ -62,4 +62,3 @@ struct ScDef[T] {
   args : List[T]
   body : RawExpr[T]
 } derive (Show)
-

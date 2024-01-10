@@ -12,68 +12,68 @@ enum Token {
 } derive(Eq, Show)
 
 
-fn in(self : Char, lw : Char, up : Char) -> Bool {
-  self >= lw && self <= up
+fn in(this : Char, lw : Char, up : Char) -> Bool {
+  this >= lw && this <= up
 }
 
-fn isDigit(self : Char) -> Bool {
-  self.in('0', '9')
+fn isDigit(this : Char) -> Bool {
+  in(this, '0', '9')
 }
 
-fn isAlpha(self : Char) -> Bool {
-  self.in('A', 'Z') || self.in('a', 'z')
+fn isAlpha(this : Char) -> Bool {
+  in(this, 'A', 'Z') || in(this, 'a', 'z')
 }
 
-fn isIdChar(self : Char) -> Bool {
-  self.isAlpha() || self.isDigit() || self == '_' || self == '-'
+fn isIdChar(this : Char) -> Bool {
+  isAlpha(this) || isDigit(this) || this == '_' || this == '-'
 }
 
-fn isWhiteSpace(self : Char) -> Bool {
-  self == ' ' || self == '\t' || self == '\n'
+fn isWhiteSpace(this : Char) -> Bool {
+  this == ' ' || this == '\t' || this == '\n'
 }
 
-fn to_number(self : Char) -> Int {
-  self.to_int() - 48
+fn to_number(this : Char) -> Int {
+  this.to_int() - 48
 }
 
-fn isOpen(self : Char) -> Bool {
-  self == '(' || self == '[' || self == '{'
+fn isOpen(this : Char) -> Bool {
+  this == '(' || this == '[' || this == '{'
 }
 
-fn isClose(self : Char) -> Bool {
-  self == ')' || self == ']' || self == '}'
+fn isClose(this : Char) -> Bool {
+  this == ')' || this == ']' || this == '}'
 }
 
 struct TokenStream {
   mut tokens : List[Token]
-} derive (Show)
+} // derive (Show)
 
 fn TokenStream::new(source : String) -> TokenStream {
-  var base = 0
+  let mut base = 0
   fn tokenize() -> List[Token] {
     if base < source.length() {
       let ch = source[base]
-      if ch.isWhiteSpace() {
+      if isWhiteSpace(ch) {
         base = base + 1
         tokenize()
-      } else if ch.isDigit() {
-        var num = ch.to_number()
+      } else if isDigit(ch) {
+        let mut num = to_number(ch)
         base = base + 1
-        while base < source.length() && source[base].isDigit() {
-          num = num * 10 + source[base].to_number()
+        while base < source.length() && isDigit(source[base]) {
+          num = num * 10 + to_number(source[base])
           base = base + 1 
         }
         Cons(Token::Number(num), tokenize())
-      } else if ch.isOpen() {
+      } else if isOpen(ch) {
         base = base + 1
         Cons(Token::Open(ch), tokenize())
-      } else if ch.isClose() {
+      } else if isClose(ch) {
         base = base + 1
         Cons(Token::Close(ch), tokenize())
-      } else if ch.isAlpha() {
-        var id = ch.to_string()
+      } else if isAlpha(ch) {
+        let mut id = ch.to_string()
         base = base + 1
-        while base < source.length() && source[base].isIdChar() {
+        while base < source.length() && isIdChar(source[base]) {
           id = id + source[base].to_string()
           base = base + 1
         }
@@ -189,7 +189,7 @@ fn parseCase(self : TokenStream) -> RawExpr[String] {
 }
 
 fn parseDefs(self : TokenStream) -> List[(String, RawExpr[String])] {
-  var res : List[(String, RawExpr[String])] = Nil
+  let mut res : List[(String, RawExpr[String])] = Nil
   while self.peek() == Open('[') {
     self.next()
     let variable = parseVar(self)
@@ -197,33 +197,33 @@ fn parseDefs(self : TokenStream) -> List[(String, RawExpr[String])] {
     self.eat(Close(']'))
     res = Cons((variable, value), res)
   }
-  res = res.reverse()
+  res = reverse(res)
   return res
 }
 
 fn parseAlts(self : TokenStream) -> List[(Int, List[String], RawExpr[String])] {
-  var res : List[(Int, List[String], RawExpr[String])] = Nil
+  let mut res : List[(Int, List[String], RawExpr[String])] = Nil
   while self.peek() == Open('[') {
     self.next()
     self.eat(Open('('))
     let tag = parseNum(self)
-    var variables : List[String] = Nil
+    let mut variables : List[String] = Nil
     while self.peek() != Close(')') {
       let variable = parseVar(self)
       variables = Cons(variable, variables)
     }
-    variables = variables.reverse()
+    variables = reverse(variables)
     self.eat(Close(')'))
     let exp = parseExpr(self)
     let alt = (tag, variables, exp)
     res = Cons(alt, res)
   }
-  res = res.reverse()
+  res = reverse(res)
   return res
 }
 
 fn parseAp(self : TokenStream) -> RawExpr[String] {
-  var res = parseExpr(self)
+  let mut res = parseExpr(self)
   while self.peek() != Close(')') {
     res = Ap(res, parseExpr(self))
   }
@@ -245,7 +245,7 @@ fn parseExpr(self : TokenStream) -> RawExpr[String] {
     }
     Open('(') => {
       self.next()
-      var exp : RawExpr[String] = Var("dummy")
+      let mut exp : RawExpr[String] = Var("dummy")
       match self.peek() {
         Let => {
           exp = parseLet(self)
@@ -283,12 +283,12 @@ fn parseSC(self : TokenStream) -> ScDef[String] {
   self.eat(DefFn)
   let fnname = parseVar(self)
   self.eat(Open('['))
-  var arglist : List[String] = Nil
+  let mut arglist : List[String] = Nil
   while self.peek() != Close(']') {
     let varname = parseVar(self)
     arglist = Cons(varname, arglist)
   }
-  arglist = arglist.reverse()
+  arglist = reverse(arglist)
   self.next()
   let body = parseExpr(self)
   { name : fnname, args : arglist, body : body }
