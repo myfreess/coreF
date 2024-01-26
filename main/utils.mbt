@@ -5,7 +5,7 @@ fn map[X, Y](this: List[X], f: (X) -> Y) -> List[Y] {
   }
 }
 
-fn contains[T : Eq](this : Array[T], elem : T) -> Bool {
+fn exist[T : Eq](this : Array[T], elem : T) -> Bool {
   let mut i = 0
   while i < this.length(), i = i + 1 {
     if this[i] == elem {
@@ -37,31 +37,44 @@ fn tuple2_str[L : Show, R : Show](t : (L, R)) -> String {
 
 fn tuple3_str[X : Show, Y : Show, Z : Show](t : (X, List[Y], Z)) -> String {
   let (x, y, z) = t
-  "(" + x.to_string() + ", " + lst2str(y) + ", " + z.to_string() + ")"
+  "(" + x.to_string() + ", " + y.to_string() + ", " + z.to_string() + ")"
 }
 
-struct Assoc[K, V] {
-  data : Array[(K, V)]
+
+fn arglist1[T](arg1 : T) -> List[T] {
+  Cons(arg1, Nil)
 }
 
-fn op_get[K : Eq + Show, V](this : Assoc[K, V], key : K) -> V {
-  let mut i = 0
-  while i < this.data.length(), i = i + 1 {
-    if this.data[i].0 == key {
-      return this.data[i].1
+fn arglist2[T](arg1 : T, arg2 : T) -> List[T] {
+  Cons(arg1, Cons(arg2, Nil))
+}
+
+fn arglist3[T](arg1 : T, arg2 : T, arg3 : T) -> List[T] {
+  Cons(arg1, Cons(arg2, Cons(arg3, Nil)))
+}
+
+fn nth[T](lst : List[T], n : Int) -> T {
+  match lst {
+    Nil => abort("nth() : list length too small")
+    Cons(x, xs) => {
+      if n == 0 {
+        x
+      } else {
+        nth(xs, n - 1)
+      }
     }
   }
-  // 查找不到
-  abort("Assoc::get(): \(key) not found")
 }
 
-fn lst2str[T : Show](this : List[T]) -> String {
-  fn go(ls : List[T]){
-    match ls {
-      Nil => ""
-      Cons(x,Nil) => "\(x)"
-      Cons(x,xs) => "\(x) " + go(xs)
+fn drop[T](lst : List[T], n : Int) -> List[T] {
+  match lst {
+    Nil => Nil
+    Cons(x, xs) => {
+      if n == 0 {
+        lst
+      } else {
+        drop(xs, n - 1)
+      }
     }
   }
-  "(" + go(this) + ")"
 }

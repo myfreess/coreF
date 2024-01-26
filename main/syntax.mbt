@@ -225,7 +225,7 @@ fn parseAlts(self : TokenStream) -> List[(Int, List[String], RawExpr[String])] {
 fn parseAp(self : TokenStream) -> RawExpr[String] {
   let mut res = parseExpr(self)
   while self.peek() != Close(')') {
-    res = Ap(res, parseExpr(self))
+    res = App(res, parseExpr(self))
   }
   return res
 }

@@ -4,7 +4,7 @@ enum Doc {
   Line(Int, Doc)
 }
 
-pub fn op_add(self : Doc, x : Doc) -> Doc {
+fn op_add(self : Doc, x : Doc) -> Doc {
   match self {
     Text(s, d) => Text(s, op_add(d, x))
     Line(indent, d) => Line(indent, op_add(d, x))
@@ -12,19 +12,19 @@ pub fn op_add(self : Doc, x : Doc) -> Doc {
   }
 }
 
-pub fn nil() -> Doc {
+fn nil() -> Doc {
   Nil
 }
 
-pub fn text(s : String) -> Doc {
+fn text(s : String) -> Doc {
   Text(s, Nil)
 }
 
-pub fn line() -> Doc {
+fn line() -> Doc {
   Line(0, Nil)
 }
 
-pub fn nest(base : Int, document : Doc) -> Doc {
+fn nest(base : Int, document : Doc) -> Doc {
   match document {
     Text(s, d) => Text(s, nest(base, d))
     Line(i, d) => Line(base + i, nest(base, d))
@@ -44,9 +44,9 @@ fn blank(n : Int) -> String {
   go(n)
 }
 
-pub fn Doc::concat(docs : Array[Doc]) -> Doc {
-  var result : Doc = nil()
-  var i = docs.length() - 1
+fn Doc::concat(docs : Array[Doc]) -> Doc {
+  let mut result : Doc = nil()
+  let mut i = docs.length() - 1
   while i >= 0 {
     result = docs[i] + result
     i = i - 1
@@ -54,9 +54,9 @@ pub fn Doc::concat(docs : Array[Doc]) -> Doc {
   return result
 }
 
-pub fn Doc::interleave(sep : Doc, docs : Array[Doc]) -> Doc {
-  var result : Doc = nil()
-  var i = docs.length() - 1
+fn Doc::interleave(sep : Doc, docs : Array[Doc]) -> Doc {
+  let mut result : Doc = nil()
+  let mut i = docs.length() - 1
   while i >= 0 {
     if i == docs.length() - 1 {
       result = docs[i] + result
@@ -68,7 +68,7 @@ pub fn Doc::interleave(sep : Doc, docs : Array[Doc]) -> Doc {
   return result
 }
 
-pub fn Doc::interleaveL(sep : Doc, docs : List[Doc]) -> Doc {
+fn Doc::interleaveL(sep : Doc, docs : List[Doc]) -> Doc {
   match docs {
     Nil => nil()
     Cons(x, Nil) => x
@@ -76,7 +76,7 @@ pub fn Doc::interleaveL(sep : Doc, docs : List[Doc]) -> Doc {
   }
 }
 
-pub fn spprint(document : Doc) {
+fn spprint(document : Doc) {
   match document {
     Text(s, document) => {
       print(s)

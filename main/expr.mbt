@@ -2,7 +2,7 @@ enum RawExpr[T] {
   Var(T)
   Num(Int)
   Constructor(Int, Int) // tag, arity
-  Ap(RawExpr[T], RawExpr[T])
+  App(RawExpr[T], RawExpr[T])
   Let(Bool, List[(T, RawExpr[T])], RawExpr[T]) // isRec, Defs, Body
   Case(RawExpr[T], List[(Int, List[T], RawExpr[T])])
 }
@@ -12,7 +12,7 @@ enum RawExpr[T] {
      Var(v) => "(Var \(v))"
      Num(n) => "(Num \(n))"
      Constructor(tag, arity) => "(Constructor \(tag) \(arity))"
-     Ap(f, x) => "(Apply \(f) \(x))"
+     App(f, x) => "(Apply \(f) \(x))"
      Let(isRec, defs, exp) => {
        if isRec {
          let defs = map(defs, tuple2_str).to_string()
@@ -62,3 +62,17 @@ struct ScDef[T] {
   args : List[T]
   body : RawExpr[T]
 } derive (Show)
+
+fn ScDef::new[T](name : String, args : List[T], body : RawExpr[T]) -> ScDef[T] {
+  { name : name, args : args, body : body }
+}
+
+let preludeDefs : List[ScDef[String]] = {
+  let id = ScDef::new("I", arglist1("x"), Var("x"))
+  let k = ScDef::new("K", arglist2("x", "y"), Var("y"))
+  let k1 = ScDef::new("K1", arglist2("x", "y"), Var("y"))
+  let s = ScDef::new("S", arglist3("f", "g", "x"), App(App(Var("f"), Var("x")), App(Var("g"), Var("x"))))
+  let compose = ScDef::new("compose", arglist3("f", "g", "x"), App(Var("f"), App(Var("g"), Var("x"))))
+  let twice = ScDef::new("twice", arglist1("f"), App(App(Var("compose"), Var("f")), Var("f")))
+  Cons(id, Cons(k, Cons(k1, Cons(s, Cons(compose, Cons(twice, Nil))))))
+}
