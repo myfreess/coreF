@@ -15,15 +15,15 @@ enum RawExpr[T] {
      App(f, x) => "(Apply \(f) \(x))"
      Let(isRec, defs, exp) => {
        if isRec {
-         let defs = map(defs, tuple2_str).to_string()
+         let defs = map(tuple2_str, defs).to_string()
          "(Letrec \(defs) \(exp))"
        } else {
-         let defs = map(defs, tuple2_str).to_string()
+         let defs = map(tuple2_str, defs).to_string()
          "(Let \(defs) \(exp))"
        }
      }
      Case(exp, alts) => {
-       let alts = map(alts, tuple3_str).to_string()
+       let alts = map(tuple3_str, alts).to_string()
        "(Case \(exp) \(alts))"
      }
    }
@@ -46,7 +46,7 @@ fn bindersOf[L, R](l : List[(L, R)]) -> List[L] {
     let (l, _) = pair
     return l
   }
-  map(l, fst)
+  map(fst, l)
 }
 
 fn rhssOf[L, R](l : List[(L, R)]) -> List[R] {
@@ -54,7 +54,7 @@ fn rhssOf[L, R](l : List[(L, R)]) -> List[R] {
     let (_, r) = pair
     return r
   }
-  map(l, snd)
+  map(snd, l)
 }
 
 struct ScDef[T] {
@@ -69,7 +69,7 @@ fn ScDef::new[T](name : String, args : List[T], body : RawExpr[T]) -> ScDef[T] {
 
 let preludeDefs : List[ScDef[String]] = {
   let id = ScDef::new("I", arglist1("x"), Var("x"))
-  let k = ScDef::new("K", arglist2("x", "y"), Var("y"))
+  let k = ScDef::new("K", arglist2("x", "y"), Var("x"))
   let k1 = ScDef::new("K1", arglist2("x", "y"), Var("y"))
   let s = ScDef::new("S", arglist3("f", "g", "x"), App(App(Var("f"), Var("x")), App(Var("g"), Var("x"))))
   let compose = ScDef::new("compose", arglist3("f", "g", "x"), App(Var("f"), App(Var("g"), Var("x"))))

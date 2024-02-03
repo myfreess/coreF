@@ -8,7 +8,7 @@ fn hash(self : Addr) -> Int {
 enum Node {
   NNum(Int)
   NApp(Addr, Addr)
-  NGlobal(Int, List[Instruction])
+  NGlobal(String, Int, List[Instruction])
   NInd(Addr)
 } derive (Eq, Show)
 
@@ -19,11 +19,11 @@ struct GHeap {
 
 type GStats Int
 
-let statInitial : GStats = GStats(0)
+let initialStat : GStats = GStats(0)
 
-fn statInc(self : GStats) -> GStats {
-  let GStats(n) = self
-  GStats(n + 1)
+fn statInc(self : GState) {
+  let GStats(n) = self.stats
+  self.stats = GStats(n + 1)
 }
 
 fn statGet(self : GStats) -> Int {
@@ -35,12 +35,82 @@ struct GState {
   mut stack : List[Addr]
   heap : GHeap
   globals : RHTable[String, Addr]
-  code : List[Instruction]
-  stats : GStats
+  mut code : List[Instruction]
+  mut stats : GStats
 }
+
+fn step(self : GState) -> Bool {
+  match self.code {
+    Nil => { return false }
+    Cons(i, is) => {
+      self.code = is
+      self.statInc()
+    //  调试用语句
+    //  let stack = lst2str(self.stack)
+    //  let restcodes = lst2str(is)
+    //  println("current stack : \(stack)")
+    //  println("exec instruction \(i)")
+    //  println("rest instructions \(restcodes)")
+    //  let GStats(n) = self.stats
+    //  println("stat = \(n)")
+    //  println(" ")
+      match i {
+        PushGlobal(f) => self.pushglobal(f)
+        PushInt(n) => self.pushint(n)
+        PushArg(n) => self.pusharg(n)
+        MkApp => self.mkapp()
+        Slide(n) => self.slide(n)
+        Unwind => self.unwind()
+        Update(n) => self.update(n)
+        Pop(n) => { self.stack = drop(self.stack, n) }
+      }
+      return true
+    }
+  }
+}
+
+fn reify(self : GState) {
+  match self.step() {
+    false => {
+      let stack = self.stack
+      match stack {
+        Cons(addr, Nil) => {
+          let res = self.heap[addr]
+          println("\(res)")
+        }
+        _ => abort("wrong stack \(stack)")
+      }
+    
+    }
+    true => self.reify()
+  }
+}
+
+fn buildInitialHeap(scdefs : List[(String, Int, List[Instruction])]) -> (GHeap, RHTable[String, Addr]) {
+  let heap = { objectCount : 0, memory : Array::make(10000, None) }
+  let globals = RHTable::new(50)
+  fn loop(lst : List[(String, Int, List[Instruction])]) {
+    match lst {
+      Nil => ()
+      Cons((name, arity, instrs), rest) => {
+        let addr = heap.alloc(NGlobal(name, arity, instrs))
+        globals[name] = addr
+        loop(rest)
+      }
+    }
+  }
+  loop(scdefs)
+  return (heap, globals)
+}
+
+let initialCode : List[Instruction] = Cons(PushGlobal("main"), Cons(Unwind, Nil))
 
 fn putStack(self : GState, addr : Addr) {
   self.stack = Cons(addr, self.stack)
+}
+
+fn putCode(self : GState, is : List[Instruction]) {
+  self.code = append(is, self.code)
 }
 
 fn pop1(self : GState) -> Addr {
@@ -49,7 +119,7 @@ fn pop1(self : GState) -> Addr {
       self.stack = reststack
       addr
     }
-    otherwise => {
+    Nil => {
       abort("pop1: stack size smaller than 1")
     }
   } 
@@ -99,12 +169,23 @@ fn op_get(self : GHeap, key : Addr) -> Node {
   }
 }
 
-fn pushglobal(name : String, vmstate : GState) {
-  let sc = vmstate.globals[name]
+fn op_set(self : GHeap, key : Addr, val : Node) {
+  let Addr(i) = key
+  self.memory[i] = Some(val)
+}
+
+
+
+// 指令对应实现
+//
+//
+
+fn pushglobal(self : GState, name : String) {
+  let sc = self.globals[name]
   match sc {
     None => abort("pushglobal(): cant find supercombinator \(name)")
     Some(addr) => {
-      vmstate.putStack(addr)
+      self.putStack(addr)
     }
   }
 }
@@ -134,4 +215,35 @@ fn pusharg(self : GState, offset : Int) {
 fn slide(self : GState, n : Int) {
   let addr = self.pop1()
   self.stack = Cons(addr, drop(self.stack, n))
+}
+
+fn unwind(self : GState) {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NNum(n) => self.putStack(addr)
+    NApp(a1, _) => {
+      self.putStack(addr)
+      self.putStack(a1)
+      self.putCode(Cons(Unwind, Nil))
+    }
+    NGlobal(_, n, c) => {
+      if length(self.stack) < n {
+        abort("Unwinding with too few arguments")
+      } else {
+        self.putStack(addr)
+        self.putCode(c)
+      }
+    }
+    NInd(a) => {
+      self.putStack(a)
+      self.putCode(Cons(Unwind, Nil))
+    }
+    otherwise => abort("unwind() : wrong kind of node \(otherwise), address \(addr)")
+  }
+}
+
+fn update(self : GState, n : Int) {
+  let addr = self.pop1()
+  let dst = nth(self.stack, n)
+  self.heap[dst] = NInd(addr)
 }

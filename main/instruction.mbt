@@ -6,4 +6,5 @@ enum Instruction {
   MkApp
   Slide(Int)
   Update(Int)
+  Pop(Int)
 } derive (Eq, Debug, Show)

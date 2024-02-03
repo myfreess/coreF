@@ -1,7 +1,7 @@
-fn map[X, Y](this: List[X], f: (X) -> Y) -> List[Y] {
+fn map[X, Y](f: (X) -> Y, this: List[X]) -> List[Y] {
   match this {
     Nil => Nil
-    Cons(x, rest) => Cons(f(x), map(rest, f))
+    Cons(x, rest) => Cons(f(x), map(f, rest))
   }
 }
 
@@ -76,5 +76,46 @@ fn drop[T](lst : List[T], n : Int) -> List[T] {
         drop(xs, n - 1)
       }
     }
+  }
+}
+
+fn append[X](this: List[X], ys: List[X]) -> List[X] {
+  match this {
+    Nil => ys
+    Cons(x, rest) => Cons(x, append(rest, ys))
+  }
+}
+
+fn length[T](this: List[T]) -> Int {
+  match this {
+    Nil => 0
+    Cons(_, xs) => 1 + length(xs)
+  }
+}
+
+fn lookupENV[K : Eq + Show, V](this : List[(K, V)], key : K) -> Option[V] {
+  match this {
+    Nil => None
+    Cons((k, v), rest) => {
+      if k == key {
+        Some(v)
+      } else {
+        lookupENV(rest, key)
+      }
+    }
+  }
+}
+
+fn lst2str[T : Show](lst : List[T]) -> String {
+  fn go(ls : List[T]){
+    match ls {
+      Nil => ""
+      Cons(x,Nil) => "\(x)"
+      Cons(x,xs) => "\(x), " + go(xs)
+    }
+  }
+  match lst {
+    Nil => "Nil"
+    _ => go(lst)
   }
 }

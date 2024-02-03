@@ -8,62 +8,44 @@ fn testParse() {
   println(parseSC(TokenStream::new(sc1)))
 }
 
-
-enum LazyData[T] {
-  Waiting(() -> T)
-  Done(T)
+fn testCompile() {
+  let id = ScDef::new("I", arglist1("x"), Var("x"))
+  let k = ScDef::new("K", arglist2("x", "y"), Var("x"))
+  let k1 = ScDef::new("K1", arglist2("x", "y"), Var("y"))
+  let s = ScDef::new("S", arglist3("f", "g", "x"), App(App(Var("f"), Var("x")), App(Var("g"), Var("x"))))
+  let compose = ScDef::new("compose", arglist3("f", "g", "x"), App(Var("f"), App(Var("g"), Var("x"))))
+  let twice = ScDef::new("twice", arglist1("f"), App(App(Var("compose"), Var("f")), Var("f")))
+  let (name, arity, instrs) = compileSC(k)
+  println("name = \(name)")
+  println("arity = \(arity)")
+  println("instrs = \(instrs)")
 }
 
-struct LazyRef[T] {
-  mut data : LazyData[T]
-}
-
-fn extract[T](self : LazyRef[T]) -> T {
-  match self.data {
-    Waiting(thunk) => {
-      let value = thunk()
-      self.data = Done(value)
-      value
-    }
-    Done(value) => value
+fn run(codes : List[String]) {
+  fn parse_then_compile(code : String) -> (String, Int, List[Instruction]) {
+    let code = TokenStream::new(code)
+    let code = parseSC(code)
+    let code = compileSC(code)
+    return code
   }
-}
-
-fn square(x : LazyRef[Int]) -> Int {
-  x.extract() * x.extract()
-}
-
-
-enum Stream[T] {
-  Empty
-  Cons(T, () -> Stream[T])
-}
-
-fn Stream::fromList[T](l : List[T]) -> Stream[T] {
-  match l {
-    Nil => Empty
-    Cons(x, xs) => Cons(x, fn () { Stream::fromList(xs) })
+  let codes = append(map(parse_then_compile, codes), map(compileSC, preludeDefs))
+  let (heap, globals) = buildInitialHeap(codes)
+  let initialState : GState = {
+    heap : heap,
+    stack : Nil,
+    code : initialCode,
+    globals : globals,
+    stats : initialStat
   }
+  initialState.reify()
 }
 
-fn stream_map[X, Y](self : Stream[X], f : (X) -> Y) -> Stream[Y] {
-  match self {
-    Empty => Empty
-    Cons(x, xs) => Cons(f(x), fn () { xs().stream_map(f) })
-  }
-} 
 
-fn take[T](self : Stream[T], n : Int) -> List[T] {
-  if n == 0 {
-    Nil
-  } else {
-    match self {
-      Empty => Nil
-      Cons(x, xs) => Cons(x, xs().take(n))
-    }
-  }
+fn fulltest() {
+  let main = "(defn main[] (S K K 3))" // => ((K x (K x)) => x
+  run(Cons(main, Nil))
 }
 
 fn init {
-  testParse()
+  fulltest()
 }
