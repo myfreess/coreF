@@ -110,7 +110,7 @@ fn peek(self : TokenStream) -> Token {
 
 fn next(self : TokenStream) {
     match self.tokens {
-    Cons(t, ts) => {
+    Cons(_, ts) => {
       self.tokens = ts
     }
     Nil => abort("next() : empty stream")
@@ -160,6 +160,7 @@ fn parsePack(self : TokenStream) -> RawExpr[String] {
       let arity = parseNum(self)
       Constructor(tag, arity)
     }
+    otherwise => abort("parsePack(): wrong token \(otherwise) ")
   }
 }
 

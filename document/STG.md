@@ -8,8 +8,6 @@ STG的全称Spineless Tagless G-Machine中包含了两种针对G-Machine的改�
 
 对应论文*Implementing lazy functional languages on stock hardware: the Spineless Tagless G-machine*。
 
-
-
 ## GHC在实用性上做出的改进
 
 2004年，Simon Marlow和SPJ发现早期被放弃的函数应用模型`Eval-Apply`在编译的情况下比`Push-Enter`模型更高效。

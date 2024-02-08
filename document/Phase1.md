@@ -238,9 +238,28 @@ struct GHeap { // 堆使用数组，数组中内容为None的空间是可使用�
   mut objectCount : Int
   memory : Array[Option[Node]]
 }
-```
 
-> 请注意，现在这个版本的G-Machine还什么primitive都没实现呢
+// 给节点分配堆空间
+fn alloc(self : GHeap, node : Node) -> Addr {
+  let heap = self
+  // 假设堆中还有空余位置
+  fn next(n : Int) -> Int {
+    (n + 1) % heap.memory.length()
+  }
+  fn free(i : Int) -> Bool {
+    match heap.memory[i] {
+      None => true
+      _    => false
+    }
+  }
+  let mut i = heap.objectCount
+  while not(free(i)) {
+    i = next(i)
+  }
+  heap.memory[i] = Some(node)
+  return Addr(i)
+}
+```
 
 + 栈，栈内只存放指向堆的地址。简单的实现用`List[Addr]`即可
 
@@ -276,6 +295,40 @@ struct GState {
   code : List[Instruction]
   stats : GStats
 }
+
+fn putStack(self : GState, addr : Addr) {
+  self.stack = Cons(addr, self.stack)
+}
+
+fn putCode(self : GState, is : List[Instruction]) {
+  self.code = append(is, self.code)
+}
+
+fn pop1(self : GState) -> Addr {
+  match self.stack {
+    Cons(addr, reststack) => {
+      self.stack = reststack
+      addr
+    }
+    Nil => {
+      abort("pop1: stack size smaller than 1")
+    }
+  } 
+}
+
+fn pop2(self : GState) -> (Addr, Addr) {
+  // 弹出栈顶两个元素
+  // 返回(第一个， 第二个)
+  match self.stack {
+    Cons(addr1, Cons(addr2, reststack)) => {
+      self.stack = reststack
+      (addr1, addr2)
+    }
+    otherwise => {
+      abort("pop2: stack size smaller than 2")
+    }
+  }
+}
 ```
 
 现在我们可以回顾前文中在纸面上推导的图规约算法一一对应到这台抽象机器了：
@@ -286,9 +339,117 @@ struct GState {
 
 + 完成实例化之后需要做收尾工作，即更新图节点(由于main没有参数，所以不必清理栈中的残留无用地址)并寻找下一个redex。
 
+这些工作都有对应的指令实现。
+
 ## 各指令对应作用
 
+目前这个极度简化的G-Machine共有7条指令 
 
+```rust
+enum Instruction {
+  Unwind
+  PushGlobal(String)
+  PushInt(Int)
+  PushArg(Int)
+  MkApp
+  Update(Int)
+  Pop(Int)
+} derive (Eq, Debug, Show)
+```
+
+`PushInt`指令最为简单，它在堆上分配一个`NNum`节点，并将它的地址入栈。
+
+```rust
+fn pushint(self : GState, num : Int) {
+  let addr = self.heap.alloc(NNum(num))
+  self.putStack(addr)
+}
+```
+
+`PushGlobal`指令从全局表中找到指定超组合子的地址，然后将地址入栈。
+
+```rust
+fn pushglobal(self : GState, name : String) {
+  let sc = self.globals[name]
+  match sc {
+    None => abort("pushglobal(): cant find supercombinator \(name)")
+    Some(addr) => {
+      self.putStack(addr)
+    }
+  }
+}
+```
+
+`PushArg`则复杂一些，它对栈内的地址布局有特定要求：第一个地址应该指向超组合子节点，紧随其后的n个地址则指向N个`NApp`节点。而`PushArg`会取到第`offset + 1`个参数。
+
+```rust
+fn pusharg(self : GState, offset : Int) {
+  // 跳过首个超组合子节点
+  // 访问第offset + 1个NApp节点
+  let appaddr = nth(self.stack, offset + 1)
+  let arg = match self.heap[appaddr] {
+    NApp(_, arg) => arg
+    otherwise => abort("pusharg: stack offset \(offset) address \(appaddr) node \(otherwise), not a applicative node")
+  }
+  self.putStack(arg)
+} 
+```
+
+`MkApp`指令从栈顶取出两个地址，然后构造一个`NApp`节点并将地址入栈。
+
+```rust
+fn mkapp(self : GState) {
+  let (a1, a2) = self.pop2()
+  let appaddr = self.heap.alloc(NApp(a1, a2))
+  self.putStack(appaddr)
+}
+```
+
+`Update`指令假设栈内第一个地址指向当前redex求值结果，跳过紧随其后的超组合子节点地址，把第N个`NApp`节点替换为一个指向求值结果的间接节点。如果当前redex是CAF，那就直接把它在堆上的`NGlobal`节点替换掉. 从这里也能看出来，为什么在惰性函数式语言里无参数函数和普通变量没有太多区别。
+
+```rust
+fn update(self : GState, n : Int) {
+  let addr = self.pop1()
+  let dst = nth(self.stack, n)
+  self.heap[dst] = NInd(addr)
+}
+```
+
+`Unwind`指令是G-Machine中类似于求值循环一样的东西，它有好几个分支条件，根据栈顶地址对应节点的种类进行判断
+
++ `Nnum`, 什么也不做
++ `NApp`, 将左侧地址入栈，再次`Unwind`
++ `NGlobal`, 在栈内有足够参数的情况下，将该超组合子加载到当前代码
++ `NInd`, 将该间接节点内地址入栈，再次`Unwind`·
+
+```rust
+fn unwind(self : GState) {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NNum(_) => self.putStack(addr)
+    NApp(a1, _) => {
+      self.putStack(addr)
+      self.putStack(a1)
+      self.putCode(Cons(Unwind, Nil))
+    }
+    NGlobal(_, n, c) => {
+      if length(self.stack) < n {
+        abort("Unwinding with too few arguments")
+      } else {
+        self.putStack(addr)
+        self.putCode(c)
+      }
+    }
+    NInd(a) => {
+      self.putStack(a)
+      self.putCode(Cons(Unwind, Nil))
+    }
+    otherwise => abort("unwind() : wrong kind of node \(otherwise), address \(addr)")
+  }
+}
+```
+
+`Pop`指令弹出n个地址，就不用函数单独实现了。
 
 ## 将超组合子编译为指令序列
 
@@ -337,7 +498,7 @@ fn compileR(self : RawExpr[String], env : List[(String, Int)], arity : Int) -> L
 }
 ```
 
-在编译超组合子的定义时使用比较粗糙的方式：一个变量如果不是参数，就当成其他超组合子(写错了会导致运行时错误)。
+在编译超组合子的定义时使用比较粗糙的方式：一个变量如果不是参数，就当成其他超组合子(写错了会导致运行时错误)。对于函数应用，先编译右侧，然后将环境中所有参数对应的偏移量加一，再编译左侧，最后加上`MkApp`指令。
 
 ```rust
 fn compileC(self : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
@@ -359,5 +520,94 @@ fn compileC(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
 
 ## 运行G-Machine
 
-## 输出
+编译完毕的超组合子还需要放到堆上(以及把地址放到全局表里), 递归处理即可。
 
+```rust
+fn buildInitialHeap(scdefs : List[(String, Int, List[Instruction])]) -> (GHeap, RHTable[String, Addr]) {
+  let heap = { objectCount : 0, memory : Array::make(10000, None) }
+  let globals = RHTable::new(50)
+  fn go(lst : List[(String, Int, List[Instruction])]) {
+    match lst {
+      Nil => ()
+      Cons((name, arity, instrs), rest) => {
+        let addr = heap.alloc(NGlobal(name, arity, instrs))
+        globals[name] = addr
+        go(rest)
+      }
+    }
+  }
+  go(scdefs)
+  return (heap, globals)
+}
+```
+
+定义函数step，它将G-Machine的状态更新一步，如果已经到达最终状态就返回false
+
+```rust
+fn step(self : GState) -> Bool {
+  match self.code {
+    Nil => { return false }
+    Cons(i, is) => {
+      self.code = is
+      self.statInc()
+      match i {
+        PushGlobal(f) => self.pushglobal(f)
+        PushInt(n) => self.pushint(n)
+        PushArg(n) => self.pusharg(n)
+        MkApp => self.mkapp()
+        Slide(n) => self.slide(n)
+        Unwind => self.unwind()
+        Update(n) => self.update(n)
+        Pop(n) => { self.stack = drop(self.stack, n) }
+      }
+      return true
+    }
+  }
+}
+```
+
+另外定义函数reify不断执行step直到最终状态
+
+```rust
+fn reify(self : GState) {
+  if self.step() {
+    self.reify()
+  } else {
+    let stack = self.stack
+    match stack {
+      Cons(addr, Nil) => {
+        let res = self.heap[addr]
+        println("\(res)")
+      }
+      _ => abort("wrong stack \(stack)")
+    }  
+  }
+}
+```
+
+对上文中的各部分进行组装
+
+```rust
+fn run(codes : List[String]) {
+  fn parse_then_compile(code : String) -> (String, Int, List[Instruction]) {
+    let code = TokenStream::new(code)
+    let code = parseSC(code)
+    let code = compileSC(code)
+    return code
+  }
+  let codes = append(map(parse_then_compile, codes), map(compileSC, preludeDefs))
+  let (heap, globals) = buildInitialHeap(codes)
+  let initialState : GState = {
+    heap : heap,
+    stack : Nil,
+    code : initialCode,
+    globals : globals,
+    stats : initialStat
+  }
+  initialState.reify()
+}
+```
+
+## 尾声
+
+我们现在所构建的G-Machine特性过少，很难运行一点稍微像样的程序。在下一篇文中，我们将一步步加入primitive和自定义数据结构等特性，并在结尾介绍G-Machine之后的惰性求值技术。

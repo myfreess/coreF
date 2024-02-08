@@ -69,7 +69,7 @@ fn nth[T](lst : List[T], n : Int) -> T {
 fn drop[T](lst : List[T], n : Int) -> List[T] {
   match lst {
     Nil => Nil
-    Cons(x, xs) => {
+    Cons(_, xs) => {
       if n == 0 {
         lst
       } else {

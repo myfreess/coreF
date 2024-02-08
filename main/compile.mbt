@@ -16,7 +16,12 @@ fn compileSC(self : ScDef[String]) -> (String, Int, List[Instruction]) {
 }
 
 fn compileR(self : RawExpr[String], env : List[(String, Int)], arity : Int) -> List[Instruction] {
-  append(compileC(self, env), Cons(Update(arity), Cons(Pop(arity), Cons(Unwind, Nil))))
+  if arity == 0 {
+    // 指令Pop 0实际上什么也没做，故 arity == 0 时不生成
+    append(compileC(self, env), Cons(Update(arity), Cons(Unwind, Nil)))
+  } else {
+    append(compileC(self, env), Cons(Update(arity), Cons(Pop(arity), Cons(Unwind, Nil))))
+  }
 }
 
 fn compileC(self : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {

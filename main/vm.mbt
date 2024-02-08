@@ -70,36 +70,34 @@ fn step(self : GState) -> Bool {
 }
 
 fn reify(self : GState) {
-  match self.step() {
-    false => {
-      let stack = self.stack
-      match stack {
-        Cons(addr, Nil) => {
-          let res = self.heap[addr]
-          println("\(res)")
-        }
-        _ => abort("wrong stack \(stack)")
+  if self.step() {
+    self.reify()
+  } else {
+    let stack = self.stack
+    match stack {
+      Cons(addr, Nil) => {
+        let res = self.heap[addr]
+        println("\(res)")
       }
-    
-    }
-    true => self.reify()
+      _ => abort("wrong stack \(stack)")
+    }  
   }
 }
 
 fn buildInitialHeap(scdefs : List[(String, Int, List[Instruction])]) -> (GHeap, RHTable[String, Addr]) {
   let heap = { objectCount : 0, memory : Array::make(10000, None) }
   let globals = RHTable::new(50)
-  fn loop(lst : List[(String, Int, List[Instruction])]) {
+  fn go(lst : List[(String, Int, List[Instruction])]) {
     match lst {
       Nil => ()
       Cons((name, arity, instrs), rest) => {
         let addr = heap.alloc(NGlobal(name, arity, instrs))
         globals[name] = addr
-        loop(rest)
+        go(rest)
       }
     }
   }
-  loop(scdefs)
+  go(scdefs)
   return (heap, globals)
 }
 
@@ -203,7 +201,7 @@ fn mkapp(self : GState) {
 
 fn pusharg(self : GState, offset : Int) {
   // 跳过首个超组合子节点
-  // 访问第offset + 1个节点
+  // 访问第offset + 1个NApp节点
   let appaddr = nth(self.stack, offset + 1)
   let arg = match self.heap[appaddr] {
     NApp(_, arg) => arg
@@ -220,7 +218,7 @@ fn slide(self : GState, n : Int) {
 fn unwind(self : GState) {
   let addr = self.pop1()
   match self.heap[addr] {
-    NNum(n) => self.putStack(addr)
+    NNum(_) => self.putStack(addr)
     NApp(a1, _) => {
       self.putStack(addr)
       self.putStack(a1)

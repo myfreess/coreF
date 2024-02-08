@@ -33,7 +33,7 @@ varch -> alpha | digit | _
 
 从表达式到G-Machine指令
 
-适当做一些窥孔优化
+适当做一些优化
 
 ## G-Machine实现
 
