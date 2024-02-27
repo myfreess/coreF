@@ -18,9 +18,9 @@ fn compileSC(self : ScDef[String]) -> (String, Int, List[Instruction]) {
 fn compileR(self : RawExpr[String], env : List[(String, Int)], arity : Int) -> List[Instruction] {
   if arity == 0 {
     // 指令Pop 0实际上什么也没做，故 arity == 0 时不生成
-    append(compileC(self, env), Cons(Update(arity), Cons(Unwind, Nil)))
+    append(compileC(self, env), from_array([Update(arity), Unwind]))
   } else {
-    append(compileC(self, env), Cons(Update(arity), Cons(Pop(arity), Cons(Unwind, Nil))))
+    append(compileC(self, env), from_array([Update(arity), Pop(arity), Unwind]))
   }
 }
 
@@ -28,16 +28,57 @@ fn compileC(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
   match self {
     Var(s) => {
       match lookupENV(env, s) {
-        None => Cons(PushGlobal(s), Nil)
-        Some(n) => Cons(PushArg(n), Nil)
+        None => from_array([PushGlobal(s)])
+        Some(n) => from_array([Push(n)])
       }
     }
-    Num(n) => Cons(PushInt(n), Nil)
+    Num(n) => from_array([PushInt(n)])
     App(e1, e2) => {
-      append(compileC(e2, env), append(compileC(e1, argOffset(1, env)), Cons(MkApp, Nil)))
+      append(compileC(e2, env), append(compileC(e1, argOffset(1, env)), from_array([MkApp])))
+    }
+    Let(rec, defs, e) => {
+      if rec {
+        compileLetrec(compileC, defs, e, env)
+      } else {
+        compileLet(compileC, defs, e, env)
+      }
     }
     _ => abort("not support yet")
   }
+}
+
+fn compileLet(comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction], defs : List[(String, RawExpr[String])], expr : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
+  let mut codes : List[Instruction] = Nil
+  let mut env = env
+  loop defs {
+    Nil => ()
+    Cons((name, expr), rest) => {
+      codes = append(codes, compileC(expr, env))
+      // 更新偏移量并加入name所对应的本地变量的偏移量
+      env = Cons((name, 0), argOffset(1, env))
+      continue(rest)
+    }
+  }
+  append(codes, append(comp(expr, env), from_array([Slide(length(defs))])))
+}
+
+fn compileLetrec(comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction], defs : List[(String, RawExpr[String])], expr : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
+  let mut env = env
+  loop defs {
+    Nil => ()
+    Cons((name, _), rest) => {
+      env = Cons((name, 0), argOffset(1, env))
+      continue(rest)
+    }
+  }
+  let n = length(defs)
+  fn compileDefs(defs : List[(String, RawExpr[String])], offset : Int) -> List[Instruction] {
+    match defs {
+      Nil => append(comp(expr, env), from_array([Slide(n)]))
+      Cons((_, expr), rest) => append(compileC(expr, env), Cons(Update(offset), compileDefs(rest, offset - 1)))
+    }
+  }
+  Cons(Alloc(n), compileDefs(defs, n - 1))
 }
 
 fn argOffset(n : Int, env : List[(String, Int)]) -> List[(String, Int)] {
@@ -47,3 +88,17 @@ fn argOffset(n : Int, env : List[(String, Int)]) -> List[(String, Int)] {
   }, env)
 }
 
+let builtins : RHTable[String, Instruction] = {
+  let table = RHTable::new(50)
+  table["add"] = Instruction::Add // 为了通过类型检查才加的
+  table["mul"] = Mul
+  table["sub"] = Sub
+  table["div"] = Div
+  table["eq"]  = Eq
+  table["neq"] = Ne
+  table["ge"] = Ge 
+  table["gt"] = Gt
+  table["le"] = Le
+  table["lt"] = Lt
+  table
+}

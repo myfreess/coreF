@@ -31,10 +31,12 @@ fn statGet(self : GStats) -> Int {
   return n
 }
 
+
 struct GState {
   mut stack : List[Addr]
   heap : GHeap
   globals : RHTable[String, Addr]
+  mut dump : List[(List[Instruction], List[Addr])]
   mut code : List[Instruction]
   mut stats : GStats
 }
@@ -46,23 +48,24 @@ fn step(self : GState) -> Bool {
       self.code = is
       self.statInc()
     //  调试用语句
-    //  let stack = lst2str(self.stack)
-    //  let restcodes = lst2str(is)
-    //  println("current stack : \(stack)")
-    //  println("exec instruction \(i)")
-    //  println("rest instructions \(restcodes)")
-    //  let GStats(n) = self.stats
-    //  println("stat = \(n)")
-    //  println(" ")
+    let stack = lst2str(self.stack)
+    let restcodes = lst2str(is)
+    println("current stack : \(stack)")
+    println("exec instruction \(i)")
+    println("rest instructions \(restcodes)")
+    let GStats(n) = self.stats
+    println("stat = \(n)")
+    println(" ")
       match i {
         PushGlobal(f) => self.pushglobal(f)
         PushInt(n) => self.pushint(n)
-        PushArg(n) => self.pusharg(n)
+        Push(n) => self.push(n)
         MkApp => self.mkapp()
         Slide(n) => self.slide(n)
         Unwind => self.unwind()
         Update(n) => self.update(n)
         Pop(n) => { self.stack = drop(self.stack, n) }
+        Alloc(n) => self.allocNodes(n)
       }
       return true
     }
@@ -103,8 +106,14 @@ fn buildInitialHeap(scdefs : List[(String, Int, List[Instruction])]) -> (GHeap, 
 
 let initialCode : List[Instruction] = Cons(PushGlobal("main"), Cons(Unwind, Nil))
 
+let initialDump : List[(List[Instruction], List[Addr])] = Nil
+
 fn putStack(self : GState, addr : Addr) {
   self.stack = Cons(addr, self.stack)
+}
+
+fn putDump(self : GState, codes : List[Instruction], stack : List[Addr]) {
+  self.dump = Cons((codes, stack), self.dump)
 }
 
 fn putCode(self : GState, is : List[Instruction]) {
@@ -199,20 +208,26 @@ fn mkapp(self : GState) {
   self.putStack(appaddr)
 }
 
-fn pusharg(self : GState, offset : Int) {
-  // 跳过首个超组合子节点
-  // 访问第offset + 1个NApp节点
-  let appaddr = nth(self.stack, offset + 1)
-  let arg = match self.heap[appaddr] {
-    NApp(_, arg) => arg
-    otherwise => abort("pusharg: stack offset \(offset) address \(appaddr) node \(otherwise), not a applicative node")
-  }
-  self.putStack(arg)
+fn push(self : GState, offset : Int) {
+  // 将第offset + 1个地址复制到栈顶
+  //    Push(n) a0 : . . . : an : s
+  // => an : a0 : . . . : an : s
+  let appaddr = nth(self.stack, offset)
+  self.putStack(appaddr)
 } 
 
 fn slide(self : GState, n : Int) {
   let addr = self.pop1()
   self.stack = Cons(addr, drop(self.stack, n))
+}
+
+fn rearrange(self : GState, n : Int) {
+  let appnodes = take(self.stack, n)
+  let args = map(fn (addr) {
+  let NApp(_, arg) = self.heap[addr]
+      arg
+  }, appnodes)
+  self.stack = append(args, drop(appnodes, n - 1))
 }
 
 fn unwind(self : GState) {
@@ -228,7 +243,11 @@ fn unwind(self : GState) {
       if length(self.stack) < n {
         abort("Unwinding with too few arguments")
       } else {
-        self.putStack(addr)
+        if n != 0 {
+          self.rearrange(n)
+        } else {
+          self.putStack(addr)
+        }
         self.putCode(c)
       }
     }
@@ -244,4 +263,13 @@ fn update(self : GState, n : Int) {
   let addr = self.pop1()
   let dst = nth(self.stack, n)
   self.heap[dst] = NInd(addr)
+}
+
+fn allocNodes(self : GState, n : Int) {
+  let dummynode : Node = NInd(Addr(-1))
+  let mut i = 0
+  while i < n, i = i + 1 {
+    let addr = self.heap.alloc(dummynode)
+    self.putStack(addr)
+  }
 }

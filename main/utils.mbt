@@ -53,6 +53,8 @@ fn arglist3[T](arg1 : T, arg2 : T, arg3 : T) -> List[T] {
   Cons(arg1, Cons(arg2, Cons(arg3, Nil)))
 }
 
+
+
 fn nth[T](lst : List[T], n : Int) -> T {
   match lst {
     Nil => abort("nth() : list length too small")
@@ -77,6 +79,19 @@ fn drop[T](lst : List[T], n : Int) -> List[T] {
       }
     }
   }
+}
+
+fn take[T](lst : List[T], n : Int) -> List[T] {
+   match lst {
+    Nil => Nil
+    Cons(x, xs) => {
+      if n == 0 {
+        Nil
+      } else {
+        Cons(x, take(xs, n - 1))
+      }
+    }
+  } 
 }
 
 fn append[X](this: List[X], ys: List[X]) -> List[X] {
@@ -118,4 +133,13 @@ fn lst2str[T : Show](lst : List[T]) -> String {
     Nil => "Nil"
     _ => go(lst)
   }
+}
+
+fn from_array[T](arr : Array[T]) -> List[T] {
+  let mut i = arr.length() - 1
+  let mut lst : List[T] = Nil
+  while i >= 0, i = i - 1 {
+    lst = Cons(arr[i], lst)
+  }
+  lst
 }

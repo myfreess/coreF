@@ -31,6 +31,7 @@ fn run(codes : List[String]) {
   let codes = append(map(parse_then_compile, codes), map(compileSC, preludeDefs))
   let (heap, globals) = buildInitialHeap(codes)
   let initialState : GState = {
+    dump : initialDump,
     heap : heap,
     stack : Nil,
     code : initialCode,
@@ -42,10 +43,10 @@ fn run(codes : List[String]) {
 
 
 fn fulltest() {
-  let main = "(defn main[] (S K K 3))" // => ((K x (K x)) => x
+  let main = "(defn main[] (letrec ([F (S K)] [X K]) (F X 3))" // => ((K x (K x)) => x
   run(Cons(main, Nil))
 }
 
 fn init {
-  fulltest()
+  testCompile()
 }

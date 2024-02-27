@@ -66,17 +66,71 @@ fn take[T](self : Stream[T], n : Int) -> List[T] {
 
 ## 一种惰性求值语言及其抽象语法树
 
-本文所用的示例是一个刻意弄得跟clojure(这是一种lisp方言)有点像的惰性求值语言，这样做是因为可以在markdown中使用clojure语言的语法高亮。
+本文所用的示例是一个刻意弄得跟clojure(这是一种lisp方言)有点像的惰性求值语言(叫做coreF)，这样做是因为可以在markdown中使用clojure语言的语法高亮。请别担心，语法可能有点麻烦，但是绝对够简单。
 
-constant applicative forms = 无参数sc
+定义函数使用`defn`关键字
+
+```clojure
+(defn factorial[n] ;; n是参数，此函数计算n的阶乘
+  (if (eq n 0) ;; 此处开始到下面三行是它的定义
+    1
+    (mul n (factorial (sub n 1))))
+```
+
+不过，虽然在平时叫它函数就好，当我们讨论惰性函数式语言时，就需要使用一个比较生僻的名词：*Super Combinator*(超组合子)。超组合子的定义中所有的自由变量都应该包含在开头的一对`[]`里。
+
+> 虽然Super Combinator直译就是超组合子，但是这个翻译在**函数程序设计语言 ：计算模型、编译技术、系统结构**一书中已经出现过了
+
+coreF程序的执行从main开始，调用某个超组合子可以当作用它的定义进行替换。
+
+```clojure
+(defn main[] (factorial 42))
+```
+
+对于main这种没有参数的超组合子，又另有一个名词来描述它：Constant Applicative Forms(简称CAF).
+
+coreF还具有一些语言特性(如自定义数据结构和用来解构的`case`表达式, 用来定义局部变量的`let`和`letrec`), 但本文所需要的只有上面这么多(甚至还没有这么多，因为`eq mul sub`等内置函数之后才会实现)。
+
+coreF没有匿名函数，这是因为匿名函数会引入额外的自由变量。消除它们需要一步额外的转换步骤：lambda lifting。这一技术可以将lambda表达式转换为外部的一个超组合子，但这不是惰性求值的重点，故此处略去。
+
+超组合子最后会被解析为`ScDef[String]`, 但写解析器是件乏味差事，笔者会在给出最终代码时一并提供。
+
+```rust
+enum RawExpr[T] {
+  Var(T)
+  Num(Int)
+  Constructor(Int, Int) // tag, arity
+  App(RawExpr[T], RawExpr[T])
+  Let(Bool, List[(T, RawExpr[T])], RawExpr[T]) // isRec, Defs, Body
+  Case(RawExpr[T], List[(Int, List[T], RawExpr[T])])
+}
+
+struct ScDef[T] {
+  name : String
+  args : List[T]
+  body : RawExpr[T]
+} derive (Show)
+```
+
+此外，还有一些预定义的coreF程序需要给出
+
+```rust
+let preludeDefs : List[ScDef[String]] = {
+  let id = ScDef::new("I", arglist1("x"), Var("x")) // id x = x
+  let k = ScDef::new("K", arglist2("x", "y"), Var("x")) // K x y = x
+  let k1 = ScDef::new("K1", arglist2("x", "y"), Var("y")) // K1 x y = y
+  let s = ScDef::new("S", arglist3("f", "g", "x"), App(App(Var("f"), Var("x")), App(Var("g"), Var("x")))) // S f g x = f x (g x)
+  let compose = ScDef::new("compose", arglist3("f", "g", "x"), App(Var("f"), App(Var("g"), Var("x")))) // compose f g x = f (g x)
+  let twice = ScDef::new("twice", arglist1("f"), App(App(Var("compose"), Var("f")), Var("f"))) // twice f = compose f f
+  Cons(id, Cons(k, Cons(k1, Cons(s, Cons(compose, Cons(twice, Nil))))))
+}
+```
 
 ## 为什么是图
 
-在惰性函数式语言中，表达式以图(graph)而非树的形式存储在内存中。
+在coreF语言中，表达式(不是上面的`RawExpr[T]`, 而是运行时的表达式)在求值时以图(graph)而非树的形式存储在内存中。
 
-为什么要这样？
-
-看看这个程序
+为什么要这样？看看这个程序
 
 ```clojure
 (defn square[x]  (mul x x))
@@ -134,7 +188,7 @@ fn square(x : LazyRef[Int]) -> Int {
 接下来我们要讨论的是图规约如何进行。在此之前，需要预先交代一些名词与基本事实。仍然使用这个程序作为例子：
 
 ```clojure
-(defn square[x]  (mul x x))
+(defn square[x]  (mul x x)) ;; 乘法运算
 (defn main[] (square (square 3)))
 ```
 
@@ -220,9 +274,29 @@ App(App(add, 33), square3)
 
 ## G-Machine概览
 
-G-Machine首先是一种状态机，它的状态包括：
+G-Machine虽然是惰性函数式语言的抽象机器，但是它的结构和编写一般命令式语言所需接触的概念差异并不算太大，它也有堆、栈这种结构，并且其指令按顺序执行。不同之处大概有这些：
 
-+ 堆(Heap), 这是存放表达式图和超组合子对应指令序列的地方。它的基本单元是图节点。
++ 堆内存的基本单位不是字节，而是图节点。
+
++ 栈里只放指向堆的地址，不放实际数据
+
+> 这样的设计并不实用，但是比较简单
+
+coreF里的超组合子会被编译成一系列G-Machine指令，大致可以分为这几种：
+
++ 访问数据的指令，例如`PushArg`(访问参数用), `PushGlobal`(访问其他超组合子用)
+
++ 在堆上构建/更新图节点的指令，如`MkApp`, `PushInt`, `Update`
+
++ 清理栈内无用地址的`Pop`指令
+
++ 表达控制流的`Unwind`指令
+
+## 解剖G-Machine状态
+
+目前这个简单版本G-Machine的状态包括：
+
++ 堆(Heap), 这是存放表达式图和超组合子对应指令序列的地方。
 
 ```rust
 type Addr Int derive(Eq, Show) // 使用type关键字包装一个地址类型
@@ -494,24 +568,29 @@ fn compileSC(self : ScDef[String]) -> (String, Int, List[Instruction]) {
 
 ```rust
 fn compileR(self : RawExpr[String], env : List[(String, Int)], arity : Int) -> List[Instruction] {
-  append(compileC(self, env), Cons(Update(arity), Cons(Pop(arity), Cons(Unwind, Nil))))
+  if arity == 0 {
+    // 指令Pop 0实际上什么也没做，故 arity == 0 时不生成
+    append(compileC(self, env), from_array([Update(arity), Unwind]))
+  } else {
+    append(compileC(self, env), from_array([Update(arity), Pop(arity), Unwind]))
+  }
 }
 ```
 
-在编译超组合子的定义时使用比较粗糙的方式：一个变量如果不是参数，就当成其他超组合子(写错了会导致运行时错误)。对于函数应用，先编译右侧，然后将环境中所有参数对应的偏移量加一，再编译左侧，最后加上`MkApp`指令。
+在编译超组合子的定义时使用比较粗糙的方式：一个变量如果不是参数，就当成其他超组合子(写错了会导致运行时错误)。对于函数应用，先编译右侧表达式，然后将环境中所有参数对应的偏移量加一(因为栈顶多出了一个地址指向实例化之后的右侧表达式)，再编译左侧，最后加上`MkApp`指令。
 
 ```rust
 fn compileC(self : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
   match self {
     Var(s) => {
       match lookupENV(env, s) {
-        None => Cons(PushGlobal(s), Nil)
-        Some(n) => Cons(PushArg(n), Nil)
+        None => from_array([PushGlobal(s)])
+        Some(n) => from_array([PushArg(n)])
       }
     }
-    Num(n) => Cons(PushInt(n), Nil)
+    Num(n) => from_array([PushInt(n)])
     App(e1, e2) => {
-      append(compileC(e2, env), append(compileC(e1, argOffset(1, env)), Cons(MkApp, Nil)))
+      append(compileC(e2, env), append(compileC(e1, argOffset(1, env)), from_array([MkApp])))
     }
     _ => abort("not support yet")
   }
@@ -541,7 +620,7 @@ fn buildInitialHeap(scdefs : List[(String, Int, List[Instruction])]) -> (GHeap, 
 }
 ```
 
-定义函数step，它将G-Machine的状态更新一步，如果已经到达最终状态就返回false
+定义函数step，它将G-Machine的状态更新一步，如果已经到达最终状态就返回false。
 
 ```rust
 fn step(self : GState) -> Bool {
@@ -555,10 +634,9 @@ fn step(self : GState) -> Bool {
         PushInt(n) => self.pushint(n)
         PushArg(n) => self.pusharg(n)
         MkApp => self.mkapp()
-        Slide(n) => self.slide(n)
         Unwind => self.unwind()
         Update(n) => self.update(n)
-        Pop(n) => { self.stack = drop(self.stack, n) }
+        Pop(n) => { self.stack = drop(self.stack, n) } // 比较简单就不用额外的函数实现了
       }
       return true
     }
@@ -611,3 +689,5 @@ fn run(codes : List[String]) {
 ## 尾声
 
 我们现在所构建的G-Machine特性过少，很难运行一点稍微像样的程序。在下一篇文中，我们将一步步加入primitive和自定义数据结构等特性，并在结尾介绍G-Machine之后的惰性求值技术。
+
+本文参考材料：Simon L Peyton Jones所写的Implementing Functional Languages: a tutorial
