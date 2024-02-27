@@ -6,8 +6,7 @@ fn map[X, Y](f: (X) -> Y, this: List[X]) -> List[Y] {
 }
 
 fn exist[T : Eq](this : Array[T], elem : T) -> Bool {
-  let mut i = 0
-  while i < this.length(), i = i + 1 {
+  for i = 0; i < this.length(); i = i + 1 {
     if this[i] == elem {
       return true
     }
