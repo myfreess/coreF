@@ -136,9 +136,8 @@ fn lst2str[T : Show](lst : List[T]) -> String {
 }
 
 fn from_array[T](arr : Array[T]) -> List[T] {
-  let mut i = arr.length() - 1
   let mut lst : List[T] = Nil
-  while i >= 0, i = i - 1 {
+  for i = arr.length() - 1; i >= 0; i = i - 1 {
     lst = Cons(arr[i], lst)
   }
   lst
