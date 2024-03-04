@@ -304,7 +304,7 @@ type Addr Int derive(Eq, Show) // 使用type关键字包装一个地址类型
 enum Node { // 图节点用一个枚举类型描述
   NNum(Int)
   NApp(Addr, Addr) // 应用节点
-  NGlobal(Int, List[Instruction]) // 存放超组合子的参数数量和对应指令序列
+  NGlobal(String, Int, List[Instruction]) // 存放超组合子的参数数量和对应指令序列
   NInd(Addr) // Indirection节点, 实现惰性求值的关键一环
 } derive (Eq)
 
@@ -363,11 +363,11 @@ fn statGet(self : GStats) -> Int {
 
 ```rust
 struct GState {
-  stack : List[Addr]
+  mut stack : List[Addr]
   heap : GHeap
   globals : RHTable[String, Addr]
-  code : List[Instruction]
-  stats : GStats
+  mut code : List[Instruction]
+  mut stats : GStats
 }
 
 fn putStack(self : GState, addr : Addr) {

@@ -48,5 +48,5 @@ fn fulltest() {
 }
 
 fn init {
-  testCompile()
+  fulltest()
 }

@@ -9,7 +9,7 @@ enum Token {
   Id(String)
   Number(Int)
   EOF
-} derive(Eq, Show)
+} derive(Eq, Debug, Show)
 
 
 fn in(this : Char, lw : Char, up : Char) -> Bool {

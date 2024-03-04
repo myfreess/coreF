@@ -1,4 +1,4 @@
-type Addr Int derive(Eq, Show)
+type Addr Int derive(Eq, Debug, Show)
 
 fn hash(self : Addr) -> Int {
   let Addr(i) = self
@@ -10,7 +10,7 @@ enum Node {
   NApp(Addr, Addr)
   NGlobal(String, Int, List[Instruction])
   NInd(Addr)
-} derive (Eq, Show)
+} derive (Eq, Debug, Show)
 
 struct GHeap {
   mut objectCount : Int

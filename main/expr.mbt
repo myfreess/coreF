@@ -5,9 +5,9 @@ enum RawExpr[T] {
   App(RawExpr[T], RawExpr[T])
   Let(Bool, List[(T, RawExpr[T])], RawExpr[T]) // isRec, Defs, Body
   Case(RawExpr[T], List[(Int, List[T], RawExpr[T])])
-}
+} derive (Debug)
 
- fn to_string[T : Show](self : RawExpr[T]) -> String {
+fn to_string[T : Show](self : RawExpr[T]) -> String {
    match self {
      Var(v) => "(Var \(v))"
      Num(n) => "(Num \(n))"
@@ -61,7 +61,7 @@ struct ScDef[T] {
   name : String
   args : List[T]
   body : RawExpr[T]
-} derive (Show)
+} derive (Debug, Show)
 
 fn ScDef::new[T](name : String, args : List[T], body : RawExpr[T]) -> ScDef[T] {
   { name : name, args : args, body : body }
