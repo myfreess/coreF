@@ -1,4 +1,4 @@
-fn testParse() {
+fn testParse() -> Unit {
   let number = "45676"
   let variable = "let-you_down"
   let application = "(foo bar)"
@@ -8,7 +8,7 @@ fn testParse() {
   println(parseSC(TokenStream::new(sc1)))
 }
 
-fn testCompile() {
+fn testCompile() -> Unit {
   let id = ScDef::new("I", arglist1("x"), Var("x"))
   let k = ScDef::new("K", arglist2("x", "y"), Var("x"))
   let k1 = ScDef::new("K1", arglist2("x", "y"), Var("y"))
@@ -21,7 +21,7 @@ fn testCompile() {
   println("instrs = \(instrs)")
 }
 
-fn run(codes : List[String]) {
+fn run(codes : List[String]) -> Unit {
   fn parse_then_compile(code : String) -> (String, Int, List[Instruction]) {
     let code = TokenStream::new(code)
     let code = parseSC(code)
@@ -42,7 +42,7 @@ fn run(codes : List[String]) {
 }
 
 
-fn fulltest() {
+fn fulltest() -> Unit {
   let main = "(defn main[] (letrec ([F (S K)] [X K]) (F X 3))" // => ((K x (K x)) => x
   run(Cons(main, Nil))
 }

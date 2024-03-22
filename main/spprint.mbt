@@ -76,7 +76,7 @@ fn Doc::interleaveL(sep : Doc, docs : List[Doc]) -> Doc {
   }
 }
 
-fn spprint(document : Doc) {
+fn spprint(document : Doc) -> Unit{
   match document {
     Text(s, document) => {
       print(s)

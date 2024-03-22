@@ -36,7 +36,7 @@ fn tuple2_str[L : Show, R : Show](t : (L, R)) -> String {
 
 fn tuple3_str[X : Show, Y : Show, Z : Show](t : (X, List[Y], Z)) -> String {
   let (x, y, z) = t
-  "(" + x.to_string() + ", " + y.to_string() + ", " + z.to_string() + ")"
+  "(" + x.to_string() + ", " + lst2str(y) + ", " + z.to_string() + ")"
 }
 
 

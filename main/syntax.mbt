@@ -108,7 +108,7 @@ fn peek(self : TokenStream) -> Token {
   }
 }
 
-fn next(self : TokenStream) {
+fn next(self : TokenStream) -> Unit {
     match self.tokens {
     Cons(_, ts) => {
       self.tokens = ts
@@ -117,7 +117,7 @@ fn next(self : TokenStream) {
   }
 }
 
-fn eat(self : TokenStream, tok : Token) {
+fn eat(self : TokenStream, tok : Token) -> Unit {
   let res = self.peek()
   if (tok != res) {
     abort("eat(): require token \(tok), but got \(res)")

@@ -21,7 +21,7 @@ type GStats Int
 
 let initialStat : GStats = GStats(0)
 
-fn statInc(self : GState) {
+fn statInc(self : GState) -> Unit {
   let GStats(n) = self.stats
   self.stats = GStats(n + 1)
 }
@@ -72,7 +72,7 @@ fn step(self : GState) -> Bool {
   }
 }
 
-fn reify(self : GState) {
+fn reify(self : GState) -> Unit {
   if self.step() {
     self.reify()
   } else {
@@ -108,15 +108,15 @@ let initialCode : List[Instruction] = Cons(PushGlobal("main"), Cons(Unwind, Nil)
 
 let initialDump : List[(List[Instruction], List[Addr])] = Nil
 
-fn putStack(self : GState, addr : Addr) {
+fn putStack(self : GState, addr : Addr) -> Unit {
   self.stack = Cons(addr, self.stack)
 }
 
-fn putDump(self : GState, codes : List[Instruction], stack : List[Addr]) {
+fn putDump(self : GState, codes : List[Instruction], stack : List[Addr]) -> Unit {
   self.dump = Cons((codes, stack), self.dump)
 }
 
-fn putCode(self : GState, is : List[Instruction]) {
+fn putCode(self : GState, is : List[Instruction]) -> Unit {
   self.code = append(is, self.code)
 }
 
@@ -176,7 +176,7 @@ fn op_get(self : GHeap, key : Addr) -> Node {
   }
 }
 
-fn op_set(self : GHeap, key : Addr, val : Node) {
+fn op_set(self : GHeap, key : Addr, val : Node) -> Unit{
   let Addr(i) = key
   self.memory[i] = Some(val)
 }
@@ -187,7 +187,7 @@ fn op_set(self : GHeap, key : Addr, val : Node) {
 //
 //
 
-fn pushglobal(self : GState, name : String) {
+fn pushglobal(self : GState, name : String) -> Unit {
   let sc = self.globals[name]
   match sc {
     None => abort("pushglobal(): cant find supercombinator \(name)")
@@ -197,18 +197,18 @@ fn pushglobal(self : GState, name : String) {
   }
 }
 
-fn pushint(self : GState, num : Int) {
+fn pushint(self : GState, num : Int) -> Unit {
   let addr = self.heap.alloc(NNum(num))
   self.putStack(addr)
 }
 
-fn mkapp(self : GState) {
+fn mkapp(self : GState) -> Unit {
   let (a1, a2) = self.pop2()
   let appaddr = self.heap.alloc(NApp(a1, a2))
   self.putStack(appaddr)
 }
 
-fn push(self : GState, offset : Int) {
+fn push(self : GState, offset : Int) -> Unit {
   // 将第offset + 1个地址复制到栈顶
   //    Push(n) a0 : . . . : an : s
   // => an : a0 : . . . : an : s
@@ -216,12 +216,12 @@ fn push(self : GState, offset : Int) {
   self.putStack(appaddr)
 } 
 
-fn slide(self : GState, n : Int) {
+fn slide(self : GState, n : Int) -> Unit {
   let addr = self.pop1()
   self.stack = Cons(addr, drop(self.stack, n))
 }
 
-fn rearrange(self : GState, n : Int) {
+fn rearrange(self : GState, n : Int) -> Unit {
   let appnodes = take(self.stack, n)
   let args = map(fn (addr) {
   let NApp(_, arg) = self.heap[addr]
@@ -230,7 +230,7 @@ fn rearrange(self : GState, n : Int) {
   self.stack = append(args, drop(appnodes, n - 1))
 }
 
-fn unwind(self : GState) {
+fn unwind(self : GState) -> Unit {
   let addr = self.pop1()
   match self.heap[addr] {
     NNum(_) => self.putStack(addr)
@@ -259,13 +259,13 @@ fn unwind(self : GState) {
   }
 }
 
-fn update(self : GState, n : Int) {
+fn update(self : GState, n : Int) -> Unit {
   let addr = self.pop1()
   let dst = nth(self.stack, n)
   self.heap[dst] = NInd(addr)
 }
 
-fn allocNodes(self : GState, n : Int) {
+fn allocNodes(self : GState, n : Int) -> Unit {
   let dummynode : Node = NInd(Addr(-1))
   for i = 0; i < n; i = i + 1 {
     let addr = self.heap.alloc(dummynode)

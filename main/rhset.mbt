@@ -15,7 +15,7 @@ fn contains[T : Hash + Eq](self : RHSet[T], elem : T) -> Bool {
   }
 }
 
-fn add[T : Hash + Eq](self : RHSet[T], elem : T) {
+fn add[T : Hash + Eq](self : RHSet[T], elem : T) -> Unit {
   self.set.insert(elem, ())
 }
 

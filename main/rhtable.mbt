@@ -12,7 +12,7 @@ fn op_get[T](self : RingBuffer[T], idx : Int) -> T {
   self.array[index]
 }
 
-fn op_set[T](self : RingBuffer[T], idx : Int, val : T) {
+fn op_set[T](self : RingBuffer[T], idx : Int, val : T) -> Unit {
   let index = (self.start + idx) % self.capacity()
   self.array[index] = val
 }
@@ -88,7 +88,7 @@ fn proportion[K, V](self:RHTable[K, V]) -> Double {
   self.count.to_double() / self.buckets.capacity().to_double()
 }
 
-fn insertWithoutGrowing[K : Hash, V](self : RHTable[K, V], key : K, val : V) {
+fn insertWithoutGrowing[K : Hash, V](self : RHTable[K, V], key : K, val : V) -> Unit {
   let start = self.get_index_by(key)
   self.buckets.start = start
   self.count = self.count + 1
@@ -174,7 +174,7 @@ fn delete[K : Hash + Eq, V](self : RHTable[K, V], key : K) -> Option[V] {
   return None
 }
 
-fn grow[K : Hash , V](self : RHTable[K, V]) {
+fn grow[K : Hash , V](self : RHTable[K, V]) -> Unit {
   // 没考虑过self.capacity()等于零的情况
   let src : RingBuffer[Bucket[K, V]] = self.buckets
   let arr: Array[Bucket[K, V]] = Array::make(self.buckets.capacity() * 2, Empty)
@@ -195,7 +195,7 @@ fn grow[K : Hash , V](self : RHTable[K, V]) {
   }
 }
 
-fn insert[K : Hash + Eq, V](self : RHTable[K, V], key : K, val : V) {
+fn insert[K : Hash + Eq, V](self : RHTable[K, V], key : K, val : V) -> Unit {
   if self.proportion() > loadFactor {
     self.grow()
   }
@@ -206,6 +206,6 @@ fn op_get[K : Hash + Eq, V](self : RHTable[K, V], key : K) -> Option[V] {
   self.lookup(key)
 }
 
-fn op_set[K : Hash + Eq, V](self : RHTable[K, V], key : K, val : V) {
+fn op_set[K : Hash + Eq, V](self : RHTable[K, V], key : K, val : V) -> Unit {
   self.insert(key, val)
 }
