@@ -18,9 +18,9 @@ fn compileSC(self : ScDef[String]) -> (String, Int, List[Instruction]) {
 fn compileR(self : RawExpr[String], env : List[(String, Int)], arity : Int) -> List[Instruction] {
   if arity == 0 {
     // 指令Pop 0实际上什么也没做，故 arity == 0 时不生成
-    append(compileE(self, env), from_array([Update(arity), Unwind]))
+    append(compileE(self, env), List::[Update(arity), Unwind])
   } else {
-    append(compileE(self, env), from_array([Update(arity), Pop(arity), Unwind]))
+    append(compileE(self, env), List::[Update(arity), Pop(arity), Unwind])
   }
 }
 
@@ -28,13 +28,13 @@ fn compileC(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
   match self {
     Var(s) => {
       match lookupENV(env, s) {
-        None => from_array([PushGlobal(s)])
-        Some(n) => from_array([Push(n)])
+        None => List::[PushGlobal(s)]
+        Some(n) => List::[Push(n)]
       }
     }
-    Num(n) => from_array([PushInt(n)])
+    Num(n) => List::[PushInt(n)]
     App(e1, e2) => {
-      append(compileC(e2, env), append(compileC(e1, argOffset(1, env)), from_array([MkApp])))
+      append(compileC(e2, env), append(compileC(e1, argOffset(1, env)), List::[MkApp]))
     }
     Let(rec, defs, e) => {
       if rec {
@@ -49,7 +49,7 @@ fn compileC(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
 
 fn compileE(self : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
   match self {
-    Num(n) => from_array([PushInt(n)])
+    Num(n) => List::[PushInt(n)]
     Let(rec, defs, e) => {
       if rec {
         compileLetrec(compileE, defs, e, env)
@@ -61,22 +61,22 @@ fn compileE(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
       let condition = compileE(b, env)
       let branch1 = compileE(e1, env)
       let branch2 = compileE(e2, env)
-      append(condition, from_array([Cond(branch1, branch2)]))
+      append(condition, List::[Cond(branch1, branch2)])
     }
     App(Var("negate"), e) => {
-      append(compileE(e, env), from_array([Neg]))
+      append(compileE(e, env), List::[Neg])
     }
     App(App(Var(op), e0), e1) => {
       match builtinOpS[op] {
-        None => append(compileC(self, env), from_array([Eval])) // 不是primitive op, 走默认分支
+        None => append(compileC(self, env), List::[Eval]) // 不是primitive op, 走默认分支
         Some(instr) => {
           let code1 = compileE(e1, env)
           let code0 = compileE(e0, argOffset(1, env))
-          append(code1, append(code0, from_array([instr])))
+          append(code1, append(code0, List::[instr]))
         }
       }
     }
-    _ => append(compileC(self, env), from_array([Eval]))
+    _ => append(compileC(self, env), List::[Eval])
   }
 }
 
@@ -93,7 +93,7 @@ fn compileLet(comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction]
       continue(rest)
     }
   }
-  append(codes, append(comp(expr, env), from_array([Slide(length(defs))])))
+  append(codes, append(comp(expr, env), List::[Slide(length(defs))]))
 }
 
 fn compileLetrec(comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction], defs : List[(String, RawExpr[String])], expr : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
@@ -108,7 +108,7 @@ fn compileLetrec(comp : (RawExpr[String], List[(String, Int)]) -> List[Instructi
   let n = length(defs)
   fn compileDefs(defs : List[(String, RawExpr[String])], offset : Int) -> List[Instruction] {
     match defs {
-      Nil => append(comp(expr, env), from_array([Slide(n)]))
+      Nil => append(comp(expr, env), List::[Slide(n)])
       Cons((_, expr), rest) => append(compileC(expr, env), Cons(Update(offset), compileDefs(rest, offset - 1)))
     }
   }

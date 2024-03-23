@@ -44,9 +44,9 @@ fn run(codes : List[String]) -> Unit {
 
 fn fulltest() -> Unit {
   let main = "(defn main[] (letrec ([F (S K)] [X K]) (F X 3))" // => ((K x (K x)) => x
-  run(Cons(main, Nil))
+  run(List::[main])
 }
 
-fn init {
+fn main {
   fulltest()
 }

@@ -233,7 +233,19 @@ fn rearrange(self : GState, n : Int) -> Unit {
 fn unwind(self : GState) -> Unit {
   let addr = self.pop1()
   match self.heap[addr] {
-    NNum(_) => self.putStack(addr)
+    NNum(_) => {
+      match self.dump {
+        Nil => self.putStack(addr)
+        Cons((instrs, stack), restDump) => {
+          // 对栈进行还原
+          self.stack = stack
+          self.putStack(addr)
+          self.dump = restDump
+          // 转回原代码执行
+          self.code = instrs
+        }
+      }
+    }
     NApp(a1, _) => {
       self.putStack(addr)
       self.putStack(a1)
@@ -253,7 +265,7 @@ fn unwind(self : GState) -> Unit {
     }
     NInd(a) => {
       self.putStack(a)
-      self.putCode(Cons(Unwind, Nil))
+      self.putCode(List::[Unwind])
     }
     otherwise => abort("unwind() : wrong kind of node \(otherwise), address \(addr)")
   }
@@ -272,3 +284,29 @@ fn allocNodes(self : GState, n : Int) -> Unit {
     self.putStack(addr)
   }
 }
+
+fn eval(self : GState) -> Unit {
+  let addr = self.pop1()
+  self.putDump(self.code, self.stack)
+  self.stack = List::[addr]
+  self.code = List::[Unwind]
+}
+
+fn negate(self : GState) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NNum(n) => {
+      let addr = self.heap.alloc(NNum(-n))
+      self.putStack(addr)
+    }
+    otherwise => {
+      // 不是NNum 直接报错
+      abort("negate: wrong kind of node \(otherwise), address \(addr) ")
+    }
+  }
+}
+
+fn condition(self : GState) -> Unit {
+  
+}
+
