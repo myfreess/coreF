@@ -22,3 +22,4 @@ enum Instruction {
   Ge // >=
   Cond(List[Instruction], List[Instruction])
 } derive (Eq, Debug, Show)
+

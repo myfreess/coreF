@@ -48,14 +48,14 @@ fn step(self : GState) -> Bool {
       self.code = is
       self.statInc()
     //  调试用语句
-    let stack = lst2str(self.stack)
-    let restcodes = lst2str(is)
-    println("current stack : \(stack)")
-    println("exec instruction \(i)")
-    println("rest instructions \(restcodes)")
-    let GStats(n) = self.stats
-    println("stat = \(n)")
-    println(" ")
+    // let stack = lst2str(self.stack)
+    // let restcodes = lst2str(is)
+    // println("current stack : \(stack)")
+    // println("exec instruction \(i)")
+    // println("rest instructions \(restcodes)")
+    // let GStats(n) = self.stats
+    // println("stat = \(n)")
+    // println(" ")
       match i {
         PushGlobal(f) => self.pushglobal(f)
         PushInt(n) => self.pushint(n)
@@ -66,6 +66,19 @@ fn step(self : GState) -> Bool {
         Update(n) => self.update(n)
         Pop(n) => { self.stack = drop(self.stack, n) }
         Alloc(n) => self.allocNodes(n)
+        Eval => self.eval()
+        Add => self.liftArith2(fn (x, y) { x + y})
+        Sub => self.liftArith2(fn (x, y) { x - y})
+        Mul => self.liftArith2(fn (x, y) { x * y})
+        Div => self.liftArith2(fn (x, y) { x / y})
+        Neg => self.negate()
+        Eq => self.liftCmp2(fn (x, y) { x == y })
+        Ne => self.liftCmp2(fn (x, y) { x != y })
+        Lt => self.liftCmp2(fn (x, y) { x < y })
+        Le => self.liftCmp2(fn (x, y) { x <= y })
+        Gt => self.liftCmp2(fn (x, y) { x > y })
+        Ge => self.liftCmp2(fn (x, y) { x >= y })
+        Cond(i1, i2) => self.condition(i1, i2)
       }
       return true
     }
@@ -80,7 +93,7 @@ fn reify(self : GState) -> Unit {
     match stack {
       Cons(addr, Nil) => {
         let res = self.heap[addr]
-        println("\(res)")
+        println("result = \(res)")
       }
       _ => abort("wrong stack \(stack)")
     }  
@@ -104,7 +117,7 @@ fn buildInitialHeap(scdefs : List[(String, Int, List[Instruction])]) -> (GHeap, 
   return (heap, globals)
 }
 
-let initialCode : List[Instruction] = Cons(PushGlobal("main"), Cons(Unwind, Nil))
+let initialCode : List[Instruction] = List::[PushGlobal("main"), Eval]
 
 let initialDump : List[(List[Instruction], List[Addr])] = Nil
 
@@ -132,6 +145,7 @@ fn pop1(self : GState) -> Addr {
   } 
 }
 
+/// 从 a1 : a2 : s 弹出 (a1, a2)
 fn pop2(self : GState) -> (Addr, Addr) {
   // 弹出栈顶两个元素
   // 返回(第一个， 第二个)
@@ -306,7 +320,44 @@ fn negate(self : GState) -> Unit {
   }
 }
 
-fn condition(self : GState) -> Unit {
-  
+fn condition(self : GState, i1 : List[Instruction], i2 : List[Instruction]) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NNum(0) => {
+      // false, 跳转i2
+      self.code = append(i2, self.code)
+    }
+    NNum(1) => {
+      // true, 跳转i1
+      self.code = append(i1, self.code)
+    }
+    otherwise => abort("cond : \(addr) = \(otherwise)")
+  }
 }
 
+fn liftArith2(self : GState, op : (Int, Int) -> Int) -> Unit {
+  // 二元算术操作
+  let (a1, a2) = self.pop2()
+  match (self.heap[a1], self.heap[a2]) {
+    (NNum(n1), NNum(n2)) => {
+      let newnode = Node::NNum(op(n1, n2))
+      let addr = self.heap.alloc(newnode)
+      self.putStack(addr)
+    }
+    (node1, node2) => abort("liftArith2: \(a1) = \(node1) \(a2) = \(node2)")
+  }
+}
+
+fn liftCmp2(self : GState, op : (Int, Int) -> Bool) -> Unit {
+  // 二元比较操作
+  let (a1, a2) = self.pop2()
+  match (self.heap[a1], self.heap[a2]) {
+    (NNum(n1), NNum(n2)) => {
+      let flag = op(n1, n2)
+      let newnode = if flag { Node::NNum(1) } else { Node::NNum(0) }
+      let addr = self.heap.alloc(newnode)
+      self.putStack(addr)
+    }
+    (node1, node2) => abort("liftCmp2: \(a1) = \(node1) \(a2) = \(node2)")
+  }
+}

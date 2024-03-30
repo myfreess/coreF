@@ -1,3 +1,6 @@
+本期文章为在MoonBit中实现惰性求值的第二篇。
+
+
 ## let表达式
 
 coref中的let表达式和MoonBit稍有不同，一个let表达式可以创建多个变量，但只能在受限的范围内使用。下为一例：
@@ -33,7 +36,7 @@ letrec相比于let就要复杂一些，它允许所定义的本地变量互相�
 调整步骤在`Unwind`指令的实现中进行。如果该超组合子无参数，则和原先的unwind无区别。在有参数时，则需要丢弃顶部的超组合子节点地址，然后调用`rearrange`函数。
 
 ```rust
-fn rearrange(self : GState, n : Int) {
+fn rearrange(self : GState, n : Int) -> Unit {
   let appnodes = take(self.stack, n)
   let args = map(fn (addr) {
   let NApp(_, arg) = self.heap[addr]
@@ -48,7 +51,7 @@ fn rearrange(self : GState, n : Int) {
 在这之后使用参数和本地变量也可以用同一条命令实现了，将`PushArg`指令改为更通用的`Push`指令。
 
 ```rust
-fn push(self : GState, offset : Int) {
+fn push(self : GState, offset : Int) -> Unit {
   // 将第offset + 1个地址复制到栈顶
   //    Push(n) a0 : . . . : an : s
   // => an : a0 : . . . : an : s
@@ -74,13 +77,13 @@ fn push(self : GState, offset : Int) {
       |
 <指向x1的地址>
       |
-..............
+...余下的栈...
 ```
 
 所以我们还需要一个新指令用来清理这些不再需要的地址，它叫做Slide(滑动)。顾名思义，`Slide(n)`的作用是跳过第一个地址，删除紧随其后的N个地址
 
 ```rust
-fn slide(self : GState, n : Int) {
+fn slide(self : GState, n : Int) -> Unit {
   let addr = self.pop1()
   self.stack = Cons(addr, drop(self.stack, n))
 }
@@ -103,14 +106,14 @@ fn compileLet(comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction]
       continue(rest)
     }
   }
-  append(codes, append(comp(expr, env), Cons(Slide(length(defs)), Nil)))
+  append(codes, append(comp(expr, env), List::[Slide(length(defs))]))
 }
 ```
 
 而letrec对应的语义要复杂一些 - 它允许表达式内的N个变量互相引用，所以需要预先申请N个地址并放到栈上。我们需要一个新指令：`Alloc(N)`, 它会预分配N个`NInd`节点并将地址依次入栈。这些间接节点里的地址是小于零的，只起到占位置的作用。
 
 ```rust
-fn allocNodes(self : GState, n : Int) {
+fn allocNodes(self : GState, n : Int) -> Unit {
   let dummynode : Node = NInd(Addr(-1))
   let mut i = 0
   while i < n, i = i + 1 {
@@ -140,8 +143,8 @@ fn compileLetrec(comp : (RawExpr[String], List[(String, Int)]) -> List[Instructi
   let n = length(defs)
   fn compileDefs(defs : List[(String, RawExpr[String])], offset : Int) -> List[Instruction] {
     match defs {
-      Nil => append(comp(expr, env), Cons(Slide(n), Nil))
-      Cons((_, expr), rest) => append(compileC(expr, env), Cons(Update(offset),  compileDefs(rest, offset - 1)))
+      Nil => append(comp(expr, env), List::[Slide(n)])
+      Cons((_, expr), rest) => append(compileC(expr, env), Cons(Update(offset), compileDefs(rest, offset - 1)))
     }
   }
   Cons(Alloc(n), compileDefs(defs, n - 1))
@@ -150,18 +153,177 @@ fn compileLetrec(comp : (RawExpr[String], List[(String, Int)]) -> List[Instructi
 
 ## 加入primitive
 
-## 自定义数据结构
+从这一步开始，我们终于可以做算术，比较数字大小，判断两个数是否相等这种基本的整数操作了。首先修改`Instruction`类型，加入相关指令
 
-## 尾声
+```rust
+  Add
+  Sub
+  Mul
+  Div 
+  Neg
+  Eq // ==
+  Ne // !=
+  Lt // <
+  Le // <=
+  Gt // >
+  Ge // >=
+  Cond(List[Instruction], List[Instruction])
+```
 
-惰性求值这一技术可以减少运行时的重复运算，与此同时它也引入了一些新的问题。这些问题包括：
+初看起来实现这些指令很简单，以Add为例，只要弹出两个栈顶地址，从堆内存中取出对应的数，执行对应操作，再把结果的地址压进栈里
 
-+ 臭名昭著的副作用顺序问题。
+```rust
+fn add(self : GState) -> Unit {
+  let (a1, a2) = self.pop2() // 弹出两个栈顶地址
+  match (self.heap[a1], self.heap[a2]) {
+    (NNum(n1), NNum(n2)) => {
+      let newnode = Node::NNum(n1 + n2)
+      let addr = self.heap.alloc(newnode)
+      self.putStack(addr)      
+    }
+    ......
+  }
+}
+```
 
-+ 冗余节点过多。一些根本不会共享的计算也要把结果放到堆上
+但是下一步我们需要面对一个问题：这是一个惰性求值语言，add的参数很可能还未进行计算(也就是说，不是`NNum`节点)。我们还需要一条指令，它应该能够强迫某个未进行的计算给出结果，或者永不停止计算。我们叫它`Eval`(Evaluation的缩写)。
 
-惰性求值语言的代表haskell对于副作用顺序给出了一个毁誉参半的解决方案：Monad。该方案对急切求值的语言也有一定价值，但网络上关于它的教程往往在介绍此概念时过分强调其数学背景，对如何使用反而疏于讲解。笔者建议不必在这方面花费过多时间。
+与此同时，我们还需要更改`GState`的结构，加入一个叫`dump`的状态。它的类型是`List[(List[Instruction], List[Addr])]`, `Eval`和`Unwind`指令会用到它。
 
-SPJ设计的Spineless G-Machine改进了冗余节点过多的问题，而作为其后继的STG统一了不同种类节点的数据布局。
+`Eval`指令的实现并不复杂：
 
-2004年，GHC的几位设计者发现以前这种参数入栈然后进入某个函数的调用模型(push enter)反而不如将责任交给调用者的eval apply模型，他们发表了一篇论文Making a Fast Curry: Push/Enter vs. Eval/Apply for Higher-order Languages。
++ 首先弹出栈顶地址
+
++ 然后保存当前还没执行的指令序列和栈(保存方式就是放到dump里)
+
++ 清空当前栈并放入之前保存的地址
+
++ 清空当前指令序列，放入指令`Unwind`
+
+> 这和急切求值语言中保存调用者上下文的处理很像，不过实用的实现会采取更高效的方法
+
+```rust
+fn eval(self : GState) -> Unit {
+  let addr = self.pop1()
+  self.putDump(self.code, self.stack)
+  self.stack = List::[addr]
+  self.code = List::[Unwind]
+}
+```
+
+这个简单的定义需要修改`Unwind`指令，当`Unwind`在`NNum`分支发现存在可恢复的上下文时(`dump`不为空)进行复原。
+
+```rust
+fn unwind(self : GState) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NNum(_) => {
+      match self.dump {
+        Nil => self.putStack(addr)
+        Cons((instrs, stack), restDump) => {
+          // 对栈进行还原
+          self.stack = stack
+          self.putStack(addr)
+          self.dump = restDump
+          // 转回原代码执行
+          self.code = instrs
+        }
+      }
+    }
+    ......
+  }
+}
+```
+
+接下来需要的是实现算术与比较指令，我们用两个函数来简化形式统一的二元运算。比较指令的结果是布尔值，为了简化实现直接用数字代替，0为`false`, 1为`true`.
+
+```rust
+fn liftArith2(self : GState, op : (Int, Int) -> Int) -> Unit {
+  // 二元算术操作
+  let (a1, a2) = self.pop2()
+  match (self.heap[a1], self.heap[a2]) {
+    (NNum(n1), NNum(n2)) => {
+      let newnode = Node::NNum(op(n1, n2))
+      let addr = self.heap.alloc(newnode)
+      self.putStack(addr)
+    }
+    (node1, node2) => abort("liftArith2: \(a1) = \(node1) \(a2) = \(node2)")
+  }
+}
+
+fn liftCmp2(self : GState, op : (Int, Int) -> Bool) -> Unit {
+  // 二元比较操作
+  let (a1, a2) = self.pop2()
+  match (self.heap[a1], self.heap[a2]) {
+    (NNum(n1), NNum(n2)) => {
+      let flag = op(n1, n2)
+      let newnode = if flag { Node::NNum(1) } else { Node::NNum(0) }
+      let addr = self.heap.alloc(newnode)
+      self.putStack(addr)
+    }
+    (node1, node2) => abort("liftCmp2: \(a1) = \(node1) \(a2) = \(node2)")
+  }
+}
+
+// 取反单独实现一下
+fn negate(self : GState) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NNum(n) => {
+      let addr = self.heap.alloc(NNum(-n))
+      self.putStack(addr)
+    }
+    otherwise => {
+      // 不是NNum 直接报错
+      abort("negate: wrong kind of node \(otherwise), address \(addr) ")
+    }
+  }
+}
+```
+
+最后实现分支：
+
+```rust
+fn condition(self : GState, i1 : List[Instruction], i2 : List[Instruction]) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NNum(0) => {
+      // false, 跳转i2
+      self.code = append(i2, self.code)
+    }
+    NNum(1) => {
+      // true, 跳转i1
+      self.code = append(i1, self.code)
+    }
+    otherwise => abort("cond : \(addr) = \(otherwise)")
+  }
+}
+```
+
+编译部分不用过多调整，只需要加入一些预定义程序
+
+```rust
+let compiledPrimitives : List[(String, Int, List[Instruction])] = List::[
+  // 算术
+  ("add", 2, List::[Push(1), Eval, Push(1), Eval, Add, Update(2), Pop(2), Unwind]),
+  ("sub", 2, List::[Push(1), Eval, Push(1), Eval, Sub, Update(2), Pop(2), Unwind]),
+  ("mul", 2, List::[Push(1), Eval, Push(1), Eval, Mul, Update(2), Pop(2), Unwind]),
+  ("div", 2, List::[Push(1), Eval, Push(1), Eval, Div, Update(2), Pop(2), Unwind]),
+  // 比较
+  ("eq",  2, List::[Push(1), Eval, Push(1), Eval, Eq,  Update(2), Pop(2), Unwind]),
+  ("neq", 2, List::[Push(1), Eval, Push(1), Eval, Ne,  Update(2), Pop(2), Unwind]),
+  ("ge",  2, List::[Push(1), Eval, Push(1), Eval, Ge,  Update(2), Pop(2), Unwind]),
+  ("gt",  2, List::[Push(1), Eval, Push(1), Eval, Gt,  Update(2), Pop(2), Unwind]),
+  ("le",  2, List::[Push(1), Eval, Push(1), Eval, Le,  Update(2), Pop(2), Unwind]),
+  ("lt",  2, List::[Push(1), Eval, Push(1), Eval, Lt,  Update(2), Pop(2), Unwind]),
+  // 杂项
+  ("negate", 1, List::[Push(0), Eval, Neg, Update(1), Pop(1), Unwind]),
+  ("if",     3,  List::[Push(0), Eval, Cond(List::[Push(1)], List::[Push(2)]), Update(3), Pop(3), Unwind])
+]
+```
+
+以及修改初始的指令序列
+
+```rust
+let initialCode : List[Instruction] = List::[PushGlobal("main"), Eval]
+```
