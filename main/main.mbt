@@ -23,7 +23,7 @@ fn run(codes : List[String]) -> Unit {
 
 
 fn fulltest() -> Unit {
-  let main = "(defn main[] (I (sub (add 4 5) 2)))"
+  let main = "(defn main[] (let ([add1 (add 1)]) (add1 1)))"
   run(List::[main])
 }
 

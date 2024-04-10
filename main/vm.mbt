@@ -266,8 +266,20 @@ fn unwind(self : GState) -> Unit {
       self.putCode(Cons(Unwind, Nil))
     }
     NGlobal(_, n, c) => {
-      if length(self.stack) < n {
-        abort("Unwinding with too few arguments")
+      let k = length(self.stack)
+      if k < n {
+        match self.dump {
+          Nil => abort("Unwinding with too few arguments")
+          Cons((i, s), rest) => {
+            // a1 : ...... : ak
+            // ||
+            // ak : s
+            // 保留redex, 还原栈
+            self.stack = append(drop(self.stack, k - 1), s)
+            self.dump = rest
+            self.code = i
+          }
+        }
       } else {
         if n != 0 {
           self.rearrange(n)

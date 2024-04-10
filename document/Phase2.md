@@ -1,5 +1,4 @@
-本期文章为在MoonBit中实现惰性求值的第二篇。
-
+本期文章为在MoonBit中实现惰性求值的第二篇。在第一篇中，我们了解了惰性求值的用途以及惰性求值的一种典型抽象机器G-Machine, 并实现了一些基础的G-Machine指令。在这一篇文章中，我们将进一步扩展上篇文章中的G-Machine实现，使其支持`let`表达式与基础的算术、比较等操作。
 
 ## let表达式
 
@@ -188,6 +187,8 @@ fn add(self : GState) -> Unit {
 
 但是下一步我们需要面对一个问题：这是一个惰性求值语言，add的参数很可能还未进行计算(也就是说，不是`NNum`节点)。我们还需要一条指令，它应该能够强迫某个未进行的计算给出结果，或者永不停止计算。我们叫它`Eval`(Evaluation的缩写)。
 
+> 用行话来讲，所谓的计算结果应该称之为Weak Head Normal Form(WHNF)
+
 与此同时，我们还需要更改`GState`的结构，加入一个叫`dump`的状态。它的类型是`List[(List[Instruction], List[Addr])]`, `Eval`和`Unwind`指令会用到它。
 
 `Eval`指令的实现并不复杂：
@@ -327,3 +328,7 @@ let compiledPrimitives : List[(String, Int, List[Instruction])] = List::[
 ```rust
 let initialCode : List[Instruction] = List::[PushGlobal("main"), Eval]
 ```
+
+## 尾声
+
+下一期文章中，我们将改进针对primitive的代码生成，以及添加对数据结构的支持
