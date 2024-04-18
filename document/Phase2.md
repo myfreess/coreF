@@ -112,8 +112,7 @@ fn compileLet(comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction]
 ```rust
 fn allocNodes(self : GState, n : Int) -> Unit {
   let dummynode : Node = NInd(Addr(-1))
-  let mut i = 0
-  while i < n, i = i + 1 {
+  for i = 0; i < n; i = i + 1 {
     let addr = self.heap.alloc(dummynode)
     self.putStack(addr)
   }
