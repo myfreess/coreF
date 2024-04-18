@@ -94,15 +94,13 @@ fn slide(self : GState, n : Int) -> Unit {
 
 ```rust
 fn compileLet(comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction], defs : List[(String, RawExpr[String])], expr : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
-  let mut codes : List[Instruction] = Nil
-  let mut env = env
-  loop defs {
-    Nil => ()
-    Cons((name, expr), rest) => {
-      codes = append(codes, compileC(expr, env))
+  let (env, codes) = loop env, List::Nil, defs {
+    env, acc, Nil => (env, acc)
+    env, acc, Cons((name, expr), rest) => {
+      let code = compileC(expr, env)
       // 更新偏移量并加入name所对应的本地变量的偏移量
-      env = Cons((name, 0), argOffset(1, env))
-      continue(rest)
+      let env = List::Cons((name, 0), argOffset(1, env))
+      continue env, append(acc, code), rest
     }
   }
   append(codes, append(comp(expr, env), List::[Slide(length(defs))]))
@@ -131,12 +129,11 @@ fn allocNodes(self : GState, n : Int) -> Unit {
 
 ```rust
 fn compileLetrec(comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction], defs : List[(String, RawExpr[String])], expr : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
-  let mut env = env
-  loop defs {
-    Nil => ()
-    Cons((name, _), rest) => {
-      env = Cons((name, 0), argOffset(1, env))
-      continue(rest)
+  let env = loop env, defs {
+    env, Nil => env
+    env, Cons((name, _), rest) => {
+      let env = List::Cons((name, 0), argOffset(1, env))
+      continue env, rest
     }
   }
   let n = length(defs)
@@ -201,7 +198,7 @@ fn add(self : GState) -> Unit {
 
 + 清空当前指令序列，放入指令`Unwind`
 
-> 这和急切求值语言中保存调用者上下文的处理很像，不过实用的实现会采取更高效的方法
+> 这和严格求值语言中保存调用者上下文的处理很像，不过实用的实现会采取更高效的方法
 
 ```rust
 fn eval(self : GState) -> Unit {

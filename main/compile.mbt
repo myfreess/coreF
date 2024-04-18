@@ -82,27 +82,24 @@ fn compileE(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
 
 
 fn compileLet(comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction], defs : List[(String, RawExpr[String])], expr : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
-  let mut codes : List[Instruction] = Nil
-  let mut env = env
-  loop defs {
-    Nil => ()
-    Cons((name, expr), rest) => {
-      codes = append(codes, compileC(expr, env))
+  let (env, codes) = loop env, List::Nil, defs {
+    env, acc, Nil => (env, acc)
+    env, acc, Cons((name, expr), rest) => {
+      let code = compileC(expr, env)
       // 更新偏移量并加入name所对应的本地变量的偏移量
-      env = Cons((name, 0), argOffset(1, env))
-      continue(rest)
+      let env = List::Cons((name, 0), argOffset(1, env))
+      continue env, append(acc, code), rest
     }
   }
   append(codes, append(comp(expr, env), List::[Slide(length(defs))]))
 }
 
 fn compileLetrec(comp : (RawExpr[String], List[(String, Int)]) -> List[Instruction], defs : List[(String, RawExpr[String])], expr : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
-  let mut env = env
-  loop defs {
-    Nil => ()
-    Cons((name, _), rest) => {
-      env = Cons((name, 0), argOffset(1, env))
-      continue(rest)
+  let env = loop env, defs {
+    env, Nil => env
+    env, Cons((name, _), rest) => {
+      let env = List::Cons((name, 0), argOffset(1, env))
+      continue env, rest
     }
   }
   let n = length(defs)
