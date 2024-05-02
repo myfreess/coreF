@@ -120,8 +120,8 @@ fn argOffset(n : Int, env : List[(String, Int)]) -> List[(String, Int)] {
 }
 
 let builtinOpS : RHTable[String, Instruction] = {
-  let table = RHTable::new(50)
-  table["add"] = Instruction::Add // 为了通过类型检查才加的
+  let table : RHTable[String, Instruction] = RHTable::new(50)
+  table["add"] = Add 
   table["mul"] = Mul
   table["sub"] = Sub
   table["div"] = Div
