@@ -33,6 +33,10 @@ fn compileC(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
       }
     }
     Num(n) => List::[PushInt(n)]
+    App(App(Constructor(1, 2), x), xs) => {
+      // Cons(x, xs)
+      compileC(xs, env) + compileC(x, argOffset(1, env)) + List::[Pack(1, 2)]
+    }
     App(e1, e2) => {
       append(compileC(e2, env), append(compileC(e1, argOffset(1, env)), List::[MkApp]))
     }
@@ -42,6 +46,10 @@ fn compileC(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
       } else {
         compileLet(compileC, defs, e, env)
       }
+    }
+    Constructor(0, 0) => {
+      // Nil
+      List::[Pack(0, 0)]
     }
     _ => abort("not support yet")
   }
@@ -76,8 +84,43 @@ fn compileE(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
         }
       }
     }
+    Case(e, alts) => {
+      compileE(e, env) + List::[CaseJump(compileAlts(alts, env))] 
+    }
+    Constructor(0, 0) => {
+      // Nil
+      List::[Pack(0, 0)]
+    }
+    App(App(Constructor(1, 2), x), xs) => {
+      // Cons(x, xs)
+      compileC(xs, env) + compileC(x, argOffset(1, env)) + List::[Pack(1, 2)]
+    }
     _ => append(compileC(self, env), List::[Eval])
   }
+}
+
+fn compileAlts(alts : List[(Int, List[String], RawExpr[String])], env : List[(String, Int)]) -> List[(Int, List[Instruction])] {
+  fn buildenv(variables : List[String], off : Int) -> List[(String, Int)] {
+    match variables {
+      Nil => Nil
+      Cons(v, vs) => {
+        Cons((v, off), buildenv(vs, off + 1))
+      }
+    }
+  }
+  fn go(alts : List[(Int, List[String], RawExpr[String])]) -> List[(Int, List[Instruction])] {
+    match alts {
+      Nil => Nil
+      Cons(alt, rest) => {
+        let (tag, variables, body) = alt
+        let offset = length(variables)
+        let env = buildenv(variables, 0) + argOffset(offset, env)
+        let code = List::[Instruction::Split(offset)] + compileE(body, env) + List::[Slide(offset)]
+        Cons((tag, code), go(rest))
+      }
+    }
+  }
+  go(alts)
 }
 
 

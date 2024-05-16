@@ -1,7 +1,8 @@
 enum Token {
   DefFn
   Let
-  Pack
+  NIL
+  CONS
   Case
   Letrec
   Open(Char)  // { [ (
@@ -46,7 +47,7 @@ fn isClose(this : Char) -> Bool {
 
 struct TokenStream {
   mut tokens : List[Token]
-} // derive (Show)
+} derive (Debug, Show)
 
 fn TokenStream::new(source : String) -> TokenStream {
   let mut base = 0
@@ -81,9 +82,11 @@ fn TokenStream::new(source : String) -> TokenStream {
           Cons(Token::Let, tokenize())
         } else if id == "letrec" {
           Cons(Token::Letrec, tokenize())
-        } else if id == "pack" {
-          Cons(Token::Pack, tokenize())
-        } else if id == "case" {
+        } else if id == "Nil" {
+          Cons(Token::NIL, tokenize())
+        } else if id == "Cons" {
+          Cons(Token::CONS, tokenize())
+        }else if id == "case" {
           Cons(Token::Case, tokenize())
         } else if id == "defn" {
           Cons(Token::DefFn, tokenize())
@@ -152,15 +155,25 @@ fn parseVar(self : TokenStream) -> String {
   }
 }
 
-fn parsePack(self : TokenStream) -> RawExpr[String] {
+fn parseNIL(self : TokenStream) -> RawExpr[String] {
   match self.peek() {
-    Pack => {
+    NIL => {
       self.next()
-      let tag = parseNum(self)
-      let arity = parseNum(self)
-      Constructor(tag, arity)
+      Constructor(0, 0)
     }
-    otherwise => abort("parsePack(): wrong token \(otherwise) ")
+    otherwise => abort("parseNIL(): wrong token \(otherwise) ")
+  }
+}
+
+fn parseCONS(self : TokenStream) -> RawExpr[String] {
+  match self.peek() {
+    CONS => {
+      self.next()
+      let x = parseExpr(self)
+      let xs = parseExpr(self)
+      App(App(Constructor(1, 2), x), xs)
+    }
+    otherwise => abort("parseCONS(): wrong token \(otherwise) ")
   }
 }
 
@@ -207,17 +220,27 @@ fn parseAlts(self : TokenStream) -> List[(Int, List[String], RawExpr[String])] {
   while self.peek() == Open('[') {
     self.next()
     self.eat(Open('('))
-    let tag = parseNum(self)
-    let mut variables : List[String] = Nil
-    while self.peek() != Close(')') {
-      let variable = parseVar(self)
-      variables = Cons(variable, variables)
+    let tag = match self.peek() {
+      NIL => 0
+      CONS => 1
     }
-    variables = reverse(variables)
+    let variables = match self.peek() {
+      NIL => {
+        self.next()
+        List::Nil
+      }
+      CONS => {
+        self.next()
+        let x = parseVar(self)
+        let xs = parseVar(self)
+        List::[x, xs]
+      }
+    }
     self.eat(Close(')'))
     let exp = parseExpr(self)
     let alt = (tag, variables, exp)
     res = Cons(alt, res)
+    self.eat(Close(']'))
   }
   res = reverse(res)
   return res
@@ -244,6 +267,9 @@ fn parseExpr(self : TokenStream) -> RawExpr[String] {
       self.next()
       Var(s)
     }
+    NIL => {
+      parseNIL(self)
+    }
     Open('(') => {
       self.next()
       let mut exp : RawExpr[String] = Var("dummy")
@@ -257,8 +283,8 @@ fn parseExpr(self : TokenStream) -> RawExpr[String] {
         Case => {
           exp = parseCase(self)
         }
-        Pack => {
-          exp = parsePack(self)
+        CONS => {
+          exp = parseCONS(self)
         }
         Id(_) => {
           exp = parseAp(self)

@@ -21,5 +21,9 @@ enum Instruction {
   Gt // >
   Ge // >=
   Cond(List[Instruction], List[Instruction])
+  Pack(Int, Int) // tag, arity
+  CaseJump(List[(Int, List[Instruction])])
+  Split(Int)
+  Print
 } derive (Eq, Debug, Show)
 

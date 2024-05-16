@@ -10,6 +10,7 @@ enum Node {
   NApp(Addr, Addr)
   NGlobal(String, Int, List[Instruction])
   NInd(Addr)
+  NConstr(Int, List[Addr])
 } derive (Eq, Debug, Show)
 
 struct GHeap {
@@ -33,6 +34,7 @@ fn statGet(self : GStats) -> Int {
 
 
 struct GState {
+  output : Buffer
   mut stack : List[Addr]
   heap : GHeap
   globals : RHTable[String, Addr]
@@ -47,15 +49,20 @@ fn step(self : GState) -> Bool {
     Cons(i, is) => {
       self.code = is
       self.statInc()
-    //  调试用语句
-    // let stack = lst2str(self.stack)
-    // let restcodes = lst2str(is)
-    // println("current stack : \(stack)")
-    // println("exec instruction \(i)")
-    // println("rest instructions \(restcodes)")
-    // let GStats(n) = self.stats
-    // println("stat = \(n)")
-    // println(" ")
+      //  调试用语句
+      println("current stack :\n")
+      loop self.stack {
+        Nil => println("")
+        Cons(addr, rest) => {
+          let content = self.heap[addr]
+          println("\(addr) -> \(content)")
+          continue rest
+        }
+      }
+      println("exec instruction \(i)")
+      let GStats(n) = self.stats
+      println("stat = \(n)")
+      println(" ")
       match i {
         PushGlobal(f) => self.pushglobal(f)
         PushInt(n) => self.pushint(n)
@@ -79,6 +86,10 @@ fn step(self : GState) -> Bool {
         Gt => self.liftCmp2(fn (x, y) { x > y })
         Ge => self.liftCmp2(fn (x, y) { x >= y })
         Cond(i1, i2) => self.condition(i1, i2)
+        Pack(tag, arity) => self.pack(tag, arity)
+        CaseJump(alts) => self.casejump(alts)
+        Split(n) => self.split(n)
+        Print => self.gprint()
       }
       return true
     }
@@ -89,14 +100,7 @@ fn reify(self : GState) -> Unit {
   if self.step() {
     self.reify()
   } else {
-    let stack = self.stack
-    match stack {
-      Cons(addr, Nil) => {
-        let res = self.heap[addr]
-        println("result = \(res)")
-      }
-      _ => abort("wrong stack \(stack)")
-    }  
+    println(self.output.to_string())
   }
 }
 
@@ -117,7 +121,7 @@ fn buildInitialHeap(scdefs : List[(String, Int, List[Instruction])]) -> (GHeap, 
   return (heap, globals)
 }
 
-let initialCode : List[Instruction] = List::[PushGlobal("main"), Eval]
+let initialCode : List[Instruction] = List::[PushGlobal("main"), Eval, Print]
 
 let initialDump : List[(List[Instruction], List[Addr])] = Nil
 
@@ -236,7 +240,7 @@ fn slide(self : GState, n : Int) -> Unit {
 }
 
 fn rearrange(self : GState, n : Int) -> Unit {
-  let appnodes = take(self.stack, n)
+  let appnodes = self.stack.take(n)
   let args = map(fn (addr) {
   let NApp(_, arg) = self.heap[addr]
       arg
@@ -292,6 +296,17 @@ fn unwind(self : GState) -> Unit {
     NInd(a) => {
       self.putStack(a)
       self.putCode(List::[Unwind])
+    }
+    NConstr(t, addrs) => {
+      match self.dump {
+        Nil => abort("Unwinding with too few arguments")
+        Cons((i, s), rest) => {
+          self.dump = rest
+          self.stack = s
+          self.code = i
+          self.putStack(addr)
+        }
+      }
     }
     otherwise => abort("unwind() : wrong kind of node \(otherwise), address \(addr)")
   }
@@ -371,5 +386,55 @@ fn liftCmp2(self : GState, op : (Int, Int) -> Bool) -> Unit {
       self.putStack(addr)
     }
     (node1, node2) => abort("liftCmp2: \(a1) = \(node1) \(a2) = \(node2)")
+  }
+}
+
+fn pack(self : GState, t : Int, n : Int) -> Unit {
+  let addrs = self.stack.take(n)
+  // 此处假设参数数量一定足够
+  self.stack = self.stack.drop(n)
+  let addr = self.heap.alloc(NConstr(t, addrs))
+  self.putStack(addr)
+}
+
+fn casejump(self : GState, table : List[(Int, List[Instruction])]) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NConstr(t, addrs) => {
+      match lookupENV(table, t) {
+        None => abort("casejump")
+        Some(instrs) => { 
+          self.code = instrs + self.code
+          self.putStack(addr)
+        }
+      }
+    }
+    otherwise => abort("casejump(): addr = \(addr) node = \(otherwise)")
+  }
+}
+
+fn split(self : GState, n : Int) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NConstr(_, addrs) => {
+      // n == addrs.length()
+      self.stack = addrs + self.stack
+    }
+  }
+}
+
+fn gprint(self : GState) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NNum(n) => {
+      self.output.write_string(n.to_string())
+      self.output.write_char(' ')
+    }
+    NConstr(0, Nil) => self.output.write_string("Nil")
+    NConstr(1, Cons(addr1, Cons(addr2, Nil))) => {
+      self.code = List::[Instruction::Eval, Print, Eval, Print] + self.code
+      self.putStack(addr2)
+      self.putStack(addr1)
+    }
   }
 }

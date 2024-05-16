@@ -19,6 +19,8 @@ fn todo[T](todo : String) -> T {
   abort("TODO: \(todo)")
 }
 
+
+
 fn reverse[X](this: List[X]) -> List[X] {
   fn go(acc, xs: List[X]) {
     match xs {
@@ -80,18 +82,6 @@ fn drop[T](lst : List[T], n : Int) -> List[T] {
   }
 }
 
-fn take[T](lst : List[T], n : Int) -> List[T] {
-   match lst {
-    Nil => Nil
-    Cons(x, xs) => {
-      if n == 0 {
-        Nil
-      } else {
-        Cons(x, take(xs, n - 1))
-      }
-    }
-  } 
-}
 
 fn append[X](this: List[X], ys: List[X]) -> List[X] {
   match this {

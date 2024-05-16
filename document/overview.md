@@ -13,13 +13,16 @@ expr -> (expr expr1 ... exprn) // 应用
      |  ($case expr alts)
      |  var
      |  num
-     |  ($pack num num) // Constructor
+     |  Nil
+     |  (Cons x xs) 
 
 defs -> def1 ... defn
 def -> [var expr]
 
 alts -> alt1 ... altn
-alt -> [(num var1 ... varn) expr]
+alt -> [pattern expr]
+
+pattern -> (Nil) | (Cons var1 var2)
 
 var -> alpha varch1 ... varchn
 varch -> alpha | digit | _
@@ -37,5 +40,5 @@ varch -> alpha | digit | _
 
 ## G-Machine实现
 
-WebAssembly/Rust + mark-copy gc 
+mark-copy gc 
 
