@@ -142,7 +142,134 @@ NGlobal(_, n, c) => {
 
 ## 自定义数据结构
 
-函数式语言
+haskell中的数据结构类型定义与MoonBit的enum相仿，不过，由于CoreF是个用于演示惰性求值的简单玩具语言，它不能自定义数据类型，内置的数据结构只有惰性列表。
+
+```clojure
+(defn take[n l]
+  (case l
+    [(Nil) Nil]
+    [(Cons x xs)
+      (if (le n 0) 
+        Nil 
+        (Cons x (take (sub n 1) xs)))]))
+```
+
+如上，通过case表达式可以对列表进行简单的模式匹配。
+
+列表对应的图节点是`NConstr(Int, List[Addr])`, 它由两个部分组成：
+
++ 用于标记不同值构造子的标签，Nil对应的标签是0，Cons对应的标签是1
+
++ 用于存放子结构地址的列表，它的长度对应一个值构造子的参数数量(arity)
+
+> 这个图节点的结构可以用来实现各种数据结构，但是coreF没做类型系统，为了演示方便只实现了惰性列表
+
+我们需要增加两条指令Split和Pack，分别用于拆开列表和组装列表。
+
+```rust
+fn split(self : GState, n : Int) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NConstr(_, addrs) => {
+      // n == addrs.length()
+      self.stack = addrs + self.stack
+    }
+  }
+}
+
+fn pack(self : GState, t : Int, n : Int) -> Unit {
+  let addrs = self.stack.take(n)
+  // 此处假设参数数量一定足够
+  self.stack = self.stack.drop(n)
+  let addr = self.heap.alloc(NConstr(t, addrs))
+  self.putStack(addr)
+}
+```
+
+此外还需要一条指令`CaseJump`, 实现case表达式
+
+```rust
+fn casejump(self : GState, table : List[(Int, List[Instruction])]) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NConstr(t, addrs) => {
+      match lookupENV(table, t) {
+        None => abort("casejump")
+        Some(instrs) => { 
+          self.code = instrs + self.code
+          self.putStack(addr)
+        }
+      }
+    }
+    otherwise => abort("casejump(): addr = \(addr) node = \(otherwise)")
+  }
+}
+```
+
+在添加了以上指令后，还需修改`compileC`和`compileE`函数。case表达式需要所匹配的对象已经被求值到WHNF，所以只有compileE函数能编译它。
+
+```rust
+// compileE
+  Case(e, alts) => {
+    compileE(e, env) + List::[CaseJump(compileAlts(alts, env))] 
+  }
+  Constructor(0, 0) => {
+    // Nil
+    List::[Pack(0, 0)]
+  }
+  App(App(Constructor(1, 2), x), xs) => {
+    // Cons(x, xs)
+    compileC(xs, env) + compileC(x, argOffset(1, env)) + List::[Pack(1, 2)]
+  }
+
+// compileC
+  App(App(Constructor(1, 2), x), xs) => {
+    // Cons(x, xs)
+    compileC(xs, env) + compileC(x, argOffset(1, env)) + List::[Pack(1, 2)]
+  }
+  Constructor(0, 0) => {
+    // Nil
+    List::[Pack(0, 0)]
+  }
+```
+
+不过，此时有一个问题出现了，先前打印程序求值结果只需要处理简单的`NNum`节点，而`NConstr`节点是有子结构的，并且在列表本身被求值到WHNF时，列表的子结构多半还是待求值的`NApp`节点。我们需要增加一个`Print`指令，它会递归地进行求值并将结果写入`GState`的`output`组件中。
+
+```rust
+struct GState {
+  output : Buffer
+  ......
+}
+
+fn gprint(self : GState) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NNum(n) => {
+      self.output.write_string(n.to_string())
+      self.output.write_char(' ')
+    }
+    NConstr(0, Nil) => self.output.write_string("Nil")
+    NConstr(1, Cons(addr1, Cons(addr2, Nil))) => {
+      // 需要强制对addr1和addr2进行求值，故先执行Eval指令
+      self.code = List::[Instruction::Eval, Print, Eval, Print] + self.code
+      self.putStack(addr2)
+      self.putStack(addr1)
+    }
+  }
+}
+```
+
+最后将G-Machine的初始代码改成
+
+```rust
+let initialCode : List[Instruction] = List::[PushGlobal("main"), Eval, Print]
+```
+
+现在我们可以使用惰性列表编写一些经典的函数式程序,例如基于无穷流的fibonacci数列
+
+```clojure
+(defn fibs[] (Cons 0 (Cons 1 (zipWith add fibs (tail fibs)))))
+```
 
 ## 尾声
 
@@ -150,10 +277,18 @@ NGlobal(_, n, c) => {
 
 + 臭名昭著的副作用顺序问题。
 
-+ 冗余节点过多。一些根本不会共享的计算也要把结果放到堆上
++ 冗余节点过多。一些根本不会共享的计算也要把结果放到堆上，这对于利用CPU的缓存机制是不利的。
 
 惰性求值语言的代表haskell对于副作用顺序给出了一个毁誉参半的解决方案：Monad。该方案对急切求值的语言也有一定价值，但网络上关于它的教程往往在介绍此概念时过分强调其数学背景，对如何使用反而疏于讲解。笔者建议不必在这方面花费过多时间。
 
+haskell的后继者Idris2(它已经不是一个惰性的语言了)除了保留Monad，还引入了另一种副作用处理机制：Algebraic Effect。
+
 SPJ设计的Spineless G-Machine改进了冗余节点过多的问题，而作为其后继的STG统一了不同种类节点的数据布局。
 
+除了抽象机器模型上的改进，GHC对haskell程序的优化还重度依赖于基于inline的优化和以射影分析(Projection Analysis, 搜索的时候要加上haskell)为代表的严格性分析技术。
+
 2004年，GHC的几位设计者发现以前这种参数入栈然后进入某个函数的调用模型(push enter)反而不如将责任交给调用者的eval apply模型，他们发表了一篇论文Making a Fast Curry: Push/Enter vs. Eval/Apply for Higher-order Languages。
+
+2007年，Simon Marlow发现tagless设计中的跳转并执行代码对现代CPU的分支预测器性能影响很大。论文`Faster laziness using dynamic pointer tagging`中描述了几种解决方案。
+
+惰性纯函数式语言展现出了很多别样的可能性，但对它的批评和反思也不少。不过，至少它是一种很有意思的技术！

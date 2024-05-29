@@ -22,4 +22,6 @@ STG有五种堆对象：
 
 2004年，Simon Marlow和SPJ发现早期被放弃的函数应用模型`Eval-Apply`在编译的情况下比`Push-Enter`模型更高效。
 
-2007年，Simon Marlow发现tagless设计中的跳转并执行代码对现代CPU的分支预测器性能影响很大。解决方案在论文`Faster laziness using dynamic pointer tagging`中描述了几种。
+2004年，GHC的几位设计者发现以前这种参数入栈然后进入某个函数的调用模型(push enter)反而不如将责任交给调用者的eval apply模型，他们发表了一篇论文Making a Fast Curry: Push/Enter vs. Eval/Apply for Higher-order Languages。
+
+2007年，Simon Marlow发现tagless设计中的跳转并执行代码对现代CPU的分支预测器性能影响很大。论文`Faster laziness using dynamic pointer tagging`中描述了几种解决方案。

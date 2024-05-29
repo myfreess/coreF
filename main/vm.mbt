@@ -50,19 +50,19 @@ fn step(self : GState) -> Bool {
       self.code = is
       self.statInc()
       //  调试用语句
-      println("current stack :\n")
-      loop self.stack {
-        Nil => println("")
-        Cons(addr, rest) => {
-          let content = self.heap[addr]
-          println("\(addr) -> \(content)")
-          continue rest
-        }
-      }
-      println("exec instruction \(i)")
-      let GStats(n) = self.stats
-      println("stat = \(n)")
-      println(" ")
+      // println("current stack :\n")
+      // loop self.stack {
+      //   Nil => println("")
+      //   Cons(addr, rest) => {
+      //     let content = self.heap[addr]
+      //     println("\(addr) -> \(content)")
+      //     continue rest
+      //   }
+      // }
+      // println("exec instruction \(i)")
+      // let GStats(n) = self.stats
+      // println("stat = \(n)")
+      // println(" ")
       match i {
         PushGlobal(f) => self.pushglobal(f)
         PushInt(n) => self.pushint(n)
