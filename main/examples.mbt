@@ -27,5 +27,16 @@ let prog : RHTable[String, String] = {
     #|       (case l2
     #|         [(Nil) Nil]
     #|         [(Cons y ys) (Cons (op x y) (zipWith op xs ys))])]))
+  table["factorial"] =
+    #| (defn factorial[n]
+    #|   (if (eq n 0) 1 (mul n (factorial (sub n 1)))))
+  table["abs"] =
+    #| (defn abs[n]
+    #|   (if (lt n 0) (negate n) n))
+  table["length"] =
+    #| (defn length[l]
+    #|   (case l
+    #|     [(Nil) 0]
+    #|     [(Cons x xs) (add 1 (length xs))]))
   table
 }

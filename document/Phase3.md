@@ -149,6 +149,28 @@ NGlobal(_, n, c) => {
 }
 ```
 
+这种基于上下文的严格性分析技术很有用，但是碰上超组合子调用就什么都做不了了。在此处我们简单介绍一下一种基于布尔运算的严格性分析，它可以分析出对于某个超组合子的调用，哪些参数应该使用严格模式编译。
+
+我们首先定义一个概念：bottom，它是一个概念上代表永不停机/异常的值。对于超组合子`f a[1] ...... a[n]`, 如果有一个参数`a[i]`满足`a[i] = bottom`则`f a[1] .... a[i] .... a[n] = bottom`(其他参数都不是bottom)，那说明无论`f`的内部控制流如何复杂，想调用它得到结果**一定**是需要参数`a[i]`的，它应该严格求值。
+
+> 不符合这个条件也不一定是完全不需要，可能只在某个分支中使用了，具体用不用要运行时决定。这种参数是典型的应该惰性求值的例子。
+
+让我们把bottom看作`false`, 非bottom的值看做`true`, 这样一来所有coref中的函数都可以看做布尔函数了。以`abs`为例
+
+```clojure
+(defn abs[n]
+  (if (lt n 0) (negate n) n))
+```
+
+我们自顶向下地分析应该怎么翻译成布尔函数
+
++ 对于`(if x y z)`而言，`x`是一定需要计算的，但`y`和`z`只需要计算一个，那么它被翻译成`x and (y or z)`。以上面这个函数为例说明，如果`n`是bottom, 那么条件`(lt n 0)`也是bottom，则整个表达式的结果也是bottom。
++ 对于primitive直接全用and就好
+
+那么判断一个参数是否需要严格地编译，只需要把上面的条件翻译成布尔函数版：`a[i] = false`则`f a[1] .... a[i] .... a[n] = false`(其他参数都是true)。
+
+> 这其实是一种叫做"抽象解释"的程序分析方法
+
 ## 自定义数据结构
 
 haskell中的数据结构类型定义与MoonBit的enum相仿，不过，由于CoreF是个用于演示惰性求值的简单玩具语言，它不能自定义数据类型，内置的数据结构只有惰性列表。
@@ -280,6 +302,23 @@ let initialCode : List[Instruction] = List::[PushGlobal("main"), Eval, Print]
 (defn fibs[] (Cons 0 (Cons 1 (zipWith add fibs (tail fibs)))))
 ```
 
+在引入数据结构之后，严格性分析也会变得更复杂。以惰性列表为例，关于它有多种求值模式
+
++ 完全严格(要求列表有限并且所有元素都不是bottom)
++ 完全惰性
++ 头严格(列表可以无限，但是里面的元素不可以有bottom)
++ 尾严格(列表必须有限，但是里面的元素可以有bottom)
+
+甚至函数所处的上下文也会改变它对某个参数的求值模式(不能孤立地分析，需要跨函数)，这种较为复杂的严格性分析一般采用射影分析(Projection Analysis)技术，相关文献：
+
++ Projections for Strictness Analysis
+
++ Static Analysis and Code Optimizations in Glasgow Haskell Compiler
+
++ Implementing Projection-based Strictness Analysis
+
++ Theory and Practice of Demand Analysis in Haskell
+
 ## 尾声
 
 惰性求值这一技术可以减少运行时的重复运算，与此同时它也引入了一些新的问题。这些问题包括：
@@ -294,7 +333,7 @@ haskell的后继者Idris2(它已经不是一个惰性的语言了)除了保留Mo
 
 SPJ设计的Spineless G-Machine改进了冗余节点过多的问题，而作为其后继的STG统一了不同种类节点的数据布局。
 
-除了抽象机器模型上的改进，GHC对haskell程序的优化还重度依赖于基于inline的优化和以射影分析(Projection Analysis, 搜索的时候要加上haskell)为代表的严格性分析技术。
+除了抽象机器模型上的改进，GHC对haskell程序的优化还重度依赖于基于inline的优化和以射影分析为代表的严格性分析技术。
 
 2004年，GHC的几位设计者发现以前这种参数入栈然后进入某个函数的调用模型(push enter)反而不如将责任交给调用者的eval apply模型，他们发表了一篇论文Making a Fast Curry: Push/Enter vs. Eval/Apply for Higher-order Languages。
 

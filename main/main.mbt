@@ -63,8 +63,11 @@ fn fulltest() -> Unit {
   let tail = prog["tail"].unwrap()
   let zipWith = prog["zipWith"].unwrap()
   let fibs = prog["fibs"].unwrap()
-  let main = "(defn main[] (take 20 fibs))"
-  run(List::[take, tail, zipWith, fibs, main])
+  let fac = prog["factorial"].unwrap()
+  let abs = prog["abs"].unwrap()
+  let len = prog["length"].unwrap()
+  let main = "(defn main[] (length (Cons 4 Nil)))"
+  run(List::[len, main])
 }
 
 fn main {
