@@ -5,24 +5,23 @@ enum Token {
   CONS
   Case
   Letrec
-  Open(Char)  // { [ (
+  Open(Char) // { [ (
   Close(Char) // } ] )
   Id(String)
   Number(Int)
   EOF
-} derive(Eq, Debug, Show)
+} derive(Eq, Show)
 
-
-fn in(this : Char, lw : Char, up : Char) -> Bool {
+fn between(this : Char, lw : Char, up : Char) -> Bool {
   this >= lw && this <= up
 }
 
 fn isDigit(this : Char) -> Bool {
-  in(this, '0', '9')
+  between(this, '0', '9')
 }
 
 fn isAlpha(this : Char) -> Bool {
-  in(this, 'A', 'Z') || in(this, 'a', 'z')
+  between(this, 'A', 'Z') || between(this, 'a', 'z')
 }
 
 fn isIdChar(this : Char) -> Bool {
@@ -45,220 +44,235 @@ fn isClose(this : Char) -> Bool {
   this == ')' || this == ']' || this == '}'
 }
 
-struct TokenStream {
-  mut tokens : List[Token]
-} derive (Debug, Show)
+struct Tokens {
+  tokens : Array[Token]
+  mut current : Int
+} derive(Show)
 
-fn TokenStream::new(source : String) -> TokenStream {
-  let mut base = 0
-  fn tokenize() -> List[Token] {
-    if base < source.length() {
-      let ch = source[base]
-      if isWhiteSpace(ch) {
-        base = base + 1
-        tokenize()
-      } else if isDigit(ch) {
-        let mut num = to_number(ch)
-        base = base + 1
-        while base < source.length() && isDigit(source[base]) {
-          num = num * 10 + to_number(source[base])
-          base = base + 1 
-        }
-        Cons(Token::Number(num), tokenize())
-      } else if isOpen(ch) {
-        base = base + 1
-        Cons(Token::Open(ch), tokenize())
-      } else if isClose(ch) {
-        base = base + 1
-        Cons(Token::Close(ch), tokenize())
-      } else if isAlpha(ch) {
-        let mut id = ch.to_string()
-        base = base + 1
-        while base < source.length() && isIdChar(source[base]) {
-          id = id + source[base].to_string()
-          base = base + 1
-        }
-        if id == "let" {
-          Cons(Token::Let, tokenize())
-        } else if id == "letrec" {
-          Cons(Token::Letrec, tokenize())
-        } else if id == "Nil" {
-          Cons(Token::NIL, tokenize())
-        } else if id == "Cons" {
-          Cons(Token::CONS, tokenize())
-        }else if id == "case" {
-          Cons(Token::Case, tokenize())
-        } else if id == "defn" {
-          Cons(Token::DefFn, tokenize())
-        } else { 
-          Cons(Token::Id(id), tokenize())
-        }
-      } else {
-        let ch = source[base]
-        abort("error : invalid Character '\(ch)' in [\(base)]")
-      }
-    } else {
-      return Nil
-    }
-  }
-  { tokens : tokenize() }
+fn Tokens::new(tokens : Array[Token]) -> Tokens {
+  Tokens::{ tokens, current: 0 }
 }
 
-fn peek(self : TokenStream) -> Token {
-  match self.tokens {
-    Cons(t, _) => t
-    Nil => Token::EOF
+fn peek(self : Tokens) -> Token {
+  if self.current < self.tokens.length() {
+    return self.tokens[self.current]
+  } else {
+    return EOF
   }
 }
 
-fn next(self : TokenStream) -> Unit {
-    match self.tokens {
-    Cons(_, ts) => {
-      self.tokens = ts
-    }
-    Nil => abort("next() : empty stream")
+type! ParseError String
+
+fn next(self : Tokens, loc~ : SourceLoc = _) -> Unit {
+  self.current = self.current + 1
+  if self.current > self.tokens.length() {
+    abort("Tokens::next(): \{loc}")
   }
 }
 
-fn eat(self : TokenStream, tok : Token) -> Unit {
-  let res = self.peek()
-  if (tok != res) {
-    abort("eat(): require token \(tok), but got \(res)")
+fn eat(self : Tokens, tok : Token, loc~ : SourceLoc = _) -> Unit!ParseError {
+  let __tok = self.peek()
+  // assert tok_ != EOF
+  if __tok != tok {
+    raise ParseError("\{loc} - Tokens::eat(): expect \{tok} but got \{__tok}")
   } else {
     self.next()
   }
-} 
+}
 
+fn tokenize(source : String) -> Tokens {
+  let tokens : Array[Token] = Array::new(capacity=source.length() / 2)
+  let mut current = 0
+  let source = source.to_array()
+  fn peek() -> Char {
+    source[current]
+  }
 
+  fn next() -> Unit {
+    current = current + 1
+  }
 
-fn parseNum(self : TokenStream) -> Int {
+  while current < source.length() {
+    let ch = peek()
+    if isWhiteSpace(ch) {
+      next()
+      continue
+    } else if isDigit(ch) {
+      let mut num = to_number(ch)
+      next()
+      while current < source.length() && isDigit(peek()) {
+        num = num * 10 + to_number(peek())
+        next()
+      }
+      tokens.push(Number(num))
+      continue
+    } else if isOpen(ch) {
+      next()
+      tokens.push(Open(ch))
+      continue
+    } else if isClose(ch) {
+      next()
+      tokens.push(Close(ch))
+      continue
+    } else if isAlpha(ch) {
+      let identifier = @buffer.new(size_hint=42)
+      identifier.write_char(ch)
+      next()
+      while current < source.length() && isIdChar(peek()) {
+        identifier.write_char(peek())
+        next()
+      }
+      let identifier = identifier.to_unchecked_string()
+      match identifier {
+        "let" => tokens.push(Let)
+        "letrec" => tokens.push(Letrec)
+        "Nil" => tokens.push(NIL)
+        "Cons" => tokens.push(CONS)
+        "case" => tokens.push(Case)
+        "defn" => tokens.push(DefFn)
+        _ => tokens.push(Id(identifier))
+      }
+    } else {
+      abort("error : invalid Character '\{ch}' in [\{current}]")
+    }
+  } else {
+    return Tokens::new(tokens)
+  }
+}
+
+test "tokenize" {
+  inspect!(tokenize("").tokens, content="[]")
+  inspect!(tokenize("12345678").tokens, content="[Number(12345678)]")
+  inspect!(tokenize("1234 5678").tokens, content="[Number(1234), Number(5678)]")
+  inspect!(
+    tokenize("a0 a_0 a-0").tokens,
+    content=
+      #|[Id("a0"), Id("a_0"), Id("a-0")]
+    ,
+  )
+  inspect!(
+    tokenize("(Cons 0 (Cons 1 Nil))").tokens,
+    content="[Open('('), CONS, Number(0), Open('('), CONS, Number(1), NIL, Close(')'), Close(')')]",
+  )
+}
+
+fn parse_num(self : Tokens) -> Int!ParseError {
   match self.peek() {
     Number(n) => {
       self.next()
-      n
+      return n
     }
-    other => {
-      abort("parse(): expect a number but got \(other)")
-    }
+    other => raise ParseError("parse_num(): expect a number but got \{other}")
   }
 }
 
-fn parseVar(self : TokenStream) -> String {
+fn parse_var(self : Tokens) -> String!ParseError {
   match self.peek() {
     Id(s) => {
       self.next()
-      s
+      return s
     }
-    other => {
-      abort("parse(): expect a variable but got \(other)")
-    }
+    other => raise ParseError("parse_var(): expect a variable but got \{other}")
   }
 }
 
-fn parseNIL(self : TokenStream) -> RawExpr[String] {
-  match self.peek() {
-    NIL => {
-      self.next()
-      Constructor(0, 0)
-    }
-    otherwise => abort("parseNIL(): wrong token \(otherwise) ")
-  }
-}
-
-fn parseCONS(self : TokenStream) -> RawExpr[String] {
+fn parse_cons(self : Tokens) -> RawExpr[String]!ParseError {
   match self.peek() {
     CONS => {
       self.next()
-      let x = parseExpr(self)
-      let xs = parseExpr(self)
-      App(App(Constructor(1, 2), x), xs)
+      let x = self.parse_expr!()
+      let xs = self.parse_expr!()
+      return App(App(Constructor(tag=1, arity=2), x), xs)
     }
-    otherwise => abort("parseCONS(): wrong token \(otherwise) ")
+    other => raise ParseError("parse_cons(): expect Cons but got \{other}")
   }
 }
 
-fn parseLet(self : TokenStream) -> RawExpr[String] {
-  self.eat(Let)
-  self.eat(Open('('))
-  let defs = parseDefs(self)
-  self.eat(Close(')'))
-  let exp = parseExpr(self)
+fn parse_let(self : Tokens) -> RawExpr[String]!ParseError {
+  self.eat!(Let)
+  self.eat!(Open('('))
+  let defs = self.parse_defs!()
+  self.eat!(Close(')'))
+  let exp = self.parse_expr!()
   Let(false, defs, exp)
 }
 
-fn parseLetrec(self : TokenStream) -> RawExpr[String] {
-  self.eat(Letrec)
-  self.eat(Open('('))
-  let defs = parseDefs(self)
-  self.eat(Close(')'))
-  let exp = parseExpr(self)
+fn parse_letrec(self : Tokens) -> RawExpr[String]!ParseError {
+  self.eat!(Letrec)
+  self.eat!(Open('('))
+  let defs = self.parse_defs!()
+  self.eat!(Close(')'))
+  let exp = self.parse_expr!()
   Let(true, defs, exp)
 }
 
-fn parseCase(self : TokenStream) -> RawExpr[String] {
-  self.eat(Case)
-  let exp = parseExpr(self)
-  let alts = parseAlts(self)
+fn parse_case(self : Tokens) -> RawExpr[String]!ParseError {
+  self.eat!(Case)
+  let exp = self.parse_expr!()
+  let alts = self.parse_alts!()
   Case(exp, alts)
 }
 
-fn parseDefs(self : TokenStream) -> List[(String, RawExpr[String])] {
-  let mut res : List[(String, RawExpr[String])] = Nil
-  while self.peek() == Open('[') {
-    self.next()
-    let variable = parseVar(self)
-    let value = parseExpr(self)
-    self.eat(Close(']'))
-    res = Cons((variable, value), res)
+fn parse_alts(
+  self : Tokens
+) -> List[(Int, List[String], RawExpr[String])]!ParseError {
+  let acc : List[(Int, List[String], RawExpr[String])] = Nil
+  loop self.peek(), acc {
+    Open('['), acc => {
+      self.next()
+      self.eat!(Open('('))
+      let (tag, variables) = match self.peek() {
+        NIL => {
+          self.next()
+          (0, List::Nil)
+        }
+        CONS => {
+          self.next()
+          let x = self.parse_var!()
+          let xs = self.parse_var!()
+          (1, List::of([x, xs]))
+        }
+        other =>
+          raise ParseError("parse_alts(): expect NIL or CONS but got \{other}")
+      }
+      self.eat!(Close(')'))
+      let exp = self.parse_expr!()
+      let alt = (tag, variables, exp)
+      self.eat!(Close(']'))
+      continue self.peek(), Cons(alt, acc)
+    }
+    _, acc => acc.rev()
   }
-  res = reverse(res)
-  return res
 }
 
-fn parseAlts(self : TokenStream) -> List[(Int, List[String], RawExpr[String])] {
-  let mut res : List[(Int, List[String], RawExpr[String])] = Nil
-  while self.peek() == Open('[') {
-    self.next()
-    self.eat(Open('('))
-    let tag = match self.peek() {
-      NIL => 0
-      CONS => 1
+fn parse_defs(self : Tokens) -> List[(String, RawExpr[String])]!ParseError {
+  let acc : List[(String, RawExpr[String])] = Nil
+  loop self.peek(), acc {
+    Open('['), acc => {
+      self.next()
+      let var = self.parse_var!()
+      let value = self.parse_expr!()
+      self.eat!(Close(']'))
+      continue self.peek(), Cons((var, value), acc)
     }
-    let variables = match self.peek() {
-      NIL => {
-        self.next()
-        List::Nil
-      }
-      CONS => {
-        self.next()
-        let x = parseVar(self)
-        let xs = parseVar(self)
-        List::[x, xs]
-      }
-    }
-    self.eat(Close(')'))
-    let exp = parseExpr(self)
-    let alt = (tag, variables, exp)
-    res = Cons(alt, res)
-    self.eat(Close(']'))
+    _, acc => acc.rev()
   }
-  res = reverse(res)
-  return res
 }
 
-fn parseAp(self : TokenStream) -> RawExpr[String] {
-  let mut res = parseExpr(self)
+fn parse_apply(self : Tokens) -> RawExpr[String]!ParseError {
+  let mut res = self.parse_expr!()
   while self.peek() != Close(')') {
-    res = App(res, parseExpr(self))
+    res = App(res, self.parse_expr!())
   }
   return res
 }
 
-fn parseExpr(self : TokenStream) -> RawExpr[String] {
+fn parse_expr(self : Tokens) -> RawExpr[String]!ParseError {
   match self.peek() {
-    EOF => {
-      abort("parse() : expect a token but got a empty token stream")
-    }
+    EOF =>
+      raise ParseError(
+        "parse_expr() : expect a token but got a empty token stream",
+      )
     Number(n) => {
       self.next()
       Num(n)
@@ -268,55 +282,51 @@ fn parseExpr(self : TokenStream) -> RawExpr[String] {
       Var(s)
     }
     NIL => {
-      parseNIL(self)
+      self.next()
+      Constructor(tag=0, arity=0)
     }
     Open('(') => {
       self.next()
-      let mut exp : RawExpr[String] = Var("dummy")
-      match self.peek() {
-        Let => {
-          exp = parseLet(self)
-        }
-        Letrec => {
-          exp = parseLetrec(self)
-        }
-        Case => {
-          exp = parseCase(self)
-        }
-        CONS => {
-          exp = parseCONS(self)
-        }
-        Id(_) => {
-          exp = parseAp(self)
-        }
-        Open('(') => {
-          exp = parseAp(self)
-        }
-        other => {
-          abort("parse(): cant parse \(other) behind a '('")
-        }
+      let exp = match self.peek() {
+        Let => self.parse_let!()
+        Letrec => self.parse_letrec!()
+        Case => self.parse_case!()
+        CONS => self.parse_cons!()
+        Id(_) | Open('(') => self.parse_apply!()
+        other =>
+          raise ParseError("parse_expr(): cant parse \{other} behind a '('")
       }
-      self.eat(Close(')'))
+      self.eat!(Close(')'))
       return exp
     }
-    other => {
-      abort("parse(): cant parse \(other)")
-    }
+    other => raise ParseError("parse_expr(): cant parse \{other}")
   }
 }
 
-fn parseSC(self : TokenStream) -> ScDef[String] {
-  self.eat(Open('('))
-  self.eat(DefFn)
-  let fnname = parseVar(self)
-  self.eat(Open('['))
-  let mut arglist : List[String] = Nil
-  while self.peek() != Close(']') {
-    let varname = parseVar(self)
-    arglist = Cons(varname, arglist)
+fn parse_sc(self : Tokens) -> ScDef[String]!ParseError {
+  self.eat!(Open('('))
+  self.eat!(DefFn)
+  let fn_name = self.parse_var!()
+  self.eat!(Open('['))
+  let args = loop self.peek(), List::Nil {
+    tok, acc =>
+      if tok != Close(']') {
+        let var = self.parse_var!()
+        continue self.peek(), Cons(var, acc)
+      } else {
+        acc.rev()
+      }
   }
-  arglist = reverse(arglist)
-  self.next()
-  let body = parseExpr(self)
-  { name : fnname, args : arglist, body : body }
+  self.eat!(Close(']'))
+  let body = self.parse_expr!()
+  self.eat!(Close(')'))
+  ScDef::{ name: fn_name, args, body }
+}
+
+test "parse scdef" {
+  let test_ = fn!(s) { ignore(tokenize(s).parse_sc!()) }
+  for p in programs {
+    let (_, p) = p
+    test_!(p)
+  }
 }

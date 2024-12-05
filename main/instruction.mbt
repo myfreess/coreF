@@ -1,3 +1,4 @@
+// start instr definition
 enum Instruction {
   Unwind
   PushGlobal(String)
@@ -25,5 +26,5 @@ enum Instruction {
   CaseJump(List[(Int, List[Instruction])])
   Split(Int)
   Print
-} derive (Eq, Debug, Show)
-
+} derive (Eq, Show)
+// end instr definition

@@ -1,55 +1,94 @@
 enum Doc {
-  Text(String)
-  Line
-  Append(Int, Doc, Doc)
-  Group(Int, Doc)
+  Nil
+  Text(String, Doc)
+  Line(Int, Doc)
 }
 
-fn width(self : Doc) -> Int {
+fn op_add(self : Doc, x : Doc) -> Doc {
   match self {
-    Text(s) => s.length()
-    Line => 1
-    Append(w, _, _) => w
-    Group(w, _) => w
+    Text(s, d) => Text(s, op_add(d, x))
+    Line(indent, d) => Line(indent, op_add(d, x))
+    Nil => x
   }
 }
 
-pub fn text(s : String) -> Doc {
-  return Text(s)
+fn nil() -> Doc {
+  Nil
 }
 
-pub fn line() -> Doc {
-  return Line
+fn text(s : String) -> Doc {
+  Text(s, Nil)
 }
 
-pub fn op_add(self : Doc, x : Doc) -> Doc {
-  let width = self.width() + x.width()
-  return Append(width, self, x)
+fn line() -> Doc {
+  Line(0, Nil)
 }
 
-pub fn group(self : Doc) -> Doc {
-  let width = self.width()
-  return Group(width, self)
+fn nest(base : Int, document : Doc) -> Doc {
+  match document {
+    Text(s, d) => Text(s, nest(base, d))
+    Line(i, d) => Line(base + i, nest(base, d))
+    Nil => Nil
+  }
 }
 
-pub fn spprint(width : Int, document : Doc) -> String {
-  fn format(fit : Bool, widthLeft : Int, document : Doc) -> (String, Int) {
-    match document {
-      Text(s) => (s, widthLeft - s.length())
-      Line =>
-        if fit {
-          (" ", widthLeft - 1)
-        } else {
-          ("\n", width)
-        }
-      Append(_, d1, d2) => {
-        let (s1, r1) = format(fit, widthLeft, d1)
-        let (s2, r2) = format(fit, r1, d2)
-        (s1 + s2, r2)
-      }
-      Group(w, d) => format((fit || w <= widthLeft), widthLeft, d)
+fn blank(n : Int) -> String {
+  // String::make(n, ' ')
+  fn go(i : Int) -> String {
+    if i == 0 {
+      return ""
+    } else {
+      " " + go(i - 1)
     }
   }
-  let (str, _) = format(false, width, document)
-  return str
+  go(n)
 }
+
+fn Doc::concat(docs : Array[Doc]) -> Doc {
+  let mut result : Doc = nil()
+  let mut i = docs.length() - 1
+  while i >= 0 {
+    result = docs[i] + result
+    i = i - 1
+  }
+  return result
+}
+
+fn Doc::interleave(sep : Doc, docs : Array[Doc]) -> Doc {
+  let mut result : Doc = nil()
+  let mut i = docs.length() - 1
+  while i >= 0 {
+    if i == docs.length() - 1 {
+      result = docs[i] + result
+    } else {
+      result = docs[i] + (sep + result)
+    }
+    i = i - 1
+  }
+  return result
+}
+
+fn Doc::interleaveL(sep : Doc, docs : List[Doc]) -> Doc {
+  match docs {
+    Nil => nil()
+    Cons(x, Nil) => x
+    Cons(x, xs) => x + (sep + Doc::interleaveL(sep, xs))
+  }
+}
+
+fn spprint(document : Doc) -> Unit{
+  match document {
+    Text(s, document) => {
+      print(s)
+      spprint(document)
+    }
+    Line(indent, document) => {
+      print("\n")
+      print(blank(indent))
+      spprint(document)
+    }
+    Nil => ()
+  }
+}
+
+
