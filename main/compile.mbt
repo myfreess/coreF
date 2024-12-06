@@ -40,10 +40,14 @@ fn compileC(
         Some(n) => List::of([Push(n)])
       }
     Num(n) => List::of([PushInt(n)])
+    // start c_constr definition
     App(App(Constructor(tag = 1, arity = 2), x), xs) => {
       // Cons(x, xs)
       compileC(xs, env) + compileC(x, argOffset(1, env)) + List::of([Pack(1, 2)])
     }
+    // Nil
+    Constructor(tag = 0, arity = 0) => List::of([Pack(0, 0)])
+    // end c_constr definition
     App(e1, e2) =>
       compileC(e2, env) + compileC(e1, argOffset(1, env)) + List::of([MkApp])
     Let(rec, defs, e) =>
@@ -51,16 +55,17 @@ fn compileC(
         compileLetrec(compileC, defs, e, env)
       } else {
         compileLet(compileC, defs, e, env)
-      }
-    // Nil
-    Constructor(tag = 0, arity = 0) => List::of([Pack(0, 0)]) 
+      } 
     _ => abort("not support yet")
   }
 }
 
 fn compileE(self : RawExpr[String], env : List[(String, Int)]) -> List[Instruction] {
   match self {
+    // start num definition
     Num(n) => List::of([PushInt(n)])
+    // end num definition
+    // start let definition
     Let(rec, defs, e) => {
       if rec {
         compileLetrec(compileE, defs, e, env)
@@ -68,6 +73,8 @@ fn compileE(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
         compileLet(compileE, defs, e, env)
       }
     }
+    // end let definition
+    // start if_and_neg definition
     App(App(App(Var("if"), b), e1), e2) => {
       let condition = compileE(b, env)
       let branch1 = compileE(e1, env)
@@ -77,6 +84,8 @@ fn compileE(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
     App(Var("negate"), e) => {
       compileE(e, env) + List::of([Neg])
     }
+    // end if_and_neg definition
+    // start binop definition
     App(App(Var(op), e0), e1) => {
       match builtinOpS[op] {
         None => compileC(self, env) + List::of([Eval])
@@ -87,6 +96,8 @@ fn compileE(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
         }
       }
     }
+    // end binop definition
+    // start e_constr_case definition
     Case(e, alts) => {
       compileE(e, env) + List::of([CaseJump(compileAlts(alts, env))])
     }
@@ -98,7 +109,10 @@ fn compileE(self : RawExpr[String], env : List[(String, Int)]) -> List[Instructi
       // Cons(x, xs)
       compileC(xs, env) + compileC(x, argOffset(1, env)) + List::of([Pack(1, 2)])
     }
+    // end e_constr_case definition
+    // start default definition
     _ => compileC(self, env) + List::of([Eval])
+    // end default definition
   }
 }
 
@@ -119,7 +133,7 @@ fn compileAlts(alts : List[(Int, List[String], RawExpr[String])], env : List[(St
         let offset = variables.length()
         let env = buildenv(variables, 0) + argOffset(offset, env)
         let code = 
-          List::of([Split(offset)]) + compileE(body, env) + List::of([Slide(offset)])
+          List::of([Split]) + compileE(body, env) + List::of([Slide(offset)])
         Cons((tag, code), go(rest))
       }
     }
@@ -255,6 +269,7 @@ let compiled_primitives : List[(String, Int, List[Instruction])] = List::of(
   ],
 )
 
+// start builtin definition
 let builtinOpS : @hashmap.T[String, Instruction] = {
   let table  = @hashmap.new(capacity = 50)
   table["add"] = Add 
@@ -269,3 +284,4 @@ let builtinOpS : @hashmap.T[String, Instruction] = {
   table["lt"] = Lt
   table
 }
+// end builtin definition

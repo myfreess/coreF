@@ -137,8 +137,10 @@ fn slide(self : GState, n : Int) -> Unit {
 fn rearrange(self : GState, n : Int) -> Unit {
   let appnodes = self.stack.take(n)
   let args = appnodes.map(fn (addr) {
-    let NApp(_, arg) = self.heap[addr]
-    arg
+    match self.heap[addr] {
+      NApp(_, arg) => arg
+      _ => panic()
+    }
   })
   self.stack = args + appnodes.drop(n - 1)
 }
@@ -175,6 +177,7 @@ fn unwind(self : GState) -> Unit {
       self.put_stack(a1)
       self.put_code(List::of([Unwind]))
     }
+    // start unwind_g definition
     NGlobal(_, n, c) => {
       let k = self.stack.length()
       if k < n {
@@ -198,6 +201,7 @@ fn unwind(self : GState) -> Unit {
         self.put_code(c)
       }
     }
+    // end unwind_g definition
     NInd(a) => {
       self.put_stack(a)
       self.put_code(List::of([Unwind]))
@@ -213,8 +217,6 @@ fn unwind(self : GState) -> Unit {
         }
       }
     }
-    otherwise => 
-      abort("unwind() : wrong kind of node \{otherwise}, address \{addr}")
   }
 }
 
@@ -286,6 +288,7 @@ fn lift_cmp2(self : GState, op : (Int, Int) -> Bool) -> Unit {
   }
 }
 
+// start split_pack definition
 fn pack(self : GState, t : Int, n : Int) -> Unit {
   let addrs = self.stack.take(n)
   self.stack = self.stack.drop(n)
@@ -293,6 +296,19 @@ fn pack(self : GState, t : Int, n : Int) -> Unit {
   self.put_stack(addr)
 }
 
+fn split(self : GState) -> Unit {
+  let addr = self.pop1()
+  match self.heap[addr] {
+    NConstr(_, addrs) => {
+      // n == addrs.length()
+      self.stack = addrs + self.stack
+    }
+    _ => panic()
+  }
+}
+// end split_pack definition
+
+// start casejump definition
 fn casejump(self : GState, table : List[(Int, List[Instruction])]) -> Unit {
   let addr = self.pop1()
   match self.heap[addr] {
@@ -308,18 +324,9 @@ fn casejump(self : GState, table : List[(Int, List[Instruction])]) -> Unit {
     otherwise => abort("casejump(): addr = \{addr} node = \{otherwise}")
   }
 }
+// end casejump definition
 
-fn split(self : GState, n : Int) -> Unit {
-  let addr = self.pop1()
-  match self.heap[addr] {
-    NConstr(_, addrs) => {
-      // n == addrs.length()
-      self.stack = addrs + self.stack
-    }
-    _ => panic()
-  }
-}
-
+// start gprint definition
 fn gprint(self : GState) -> Unit {
   let addr = self.pop1()
   match self.heap[addr] {
@@ -336,6 +343,7 @@ fn gprint(self : GState) -> Unit {
     _ => panic()
   }
 }
+// end gprint definition
 
 
 fn build_initial_heap(
@@ -387,7 +395,7 @@ fn step(self : GState) -> Bool {
         Cond(i1, i2) => self.condition(i1, i2)
         Pack(tag, arity) => self.pack(tag, arity)
         CaseJump(alts) => self.casejump(alts)
-        Split(n) => self.split(n)
+        Split => self.split()
         Print => self.gprint()
       }
       return true

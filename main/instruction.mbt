@@ -24,7 +24,7 @@ enum Instruction {
   Cond(List[Instruction], List[Instruction])
   Pack(Int, Int) // tag, arity
   CaseJump(List[(Int, List[Instruction])])
-  Split(Int)
+  Split
   Print
 } derive (Eq, Show)
 // end instr definition
